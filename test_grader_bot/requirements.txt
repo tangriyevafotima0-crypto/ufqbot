@@ -1,0 +1,6 @@
+python-telegram-bot[ext]>=20.0
+opencv-python-headless
+Pillow
+openpyxl
+numpy
+python-dotenv
