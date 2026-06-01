@@ -1,0 +1,30 @@
+{
+  "project_type": "Python Telegram bot using python-telegram-bot async (Application class) with OMR scanning via OpenCV",
+  "language": "Python",
+  "build_system": "pip with requirements.txt, deployed via systemd on Ubuntu",
+  "test_framework": "No existing tests - validation is through syntax checking and import verification",
+  "build_command": "pip install -r test_grader_bot/requirements.txt",
+  "test_command": "python -c \"import test_grader_bot.bot; import test_grader_bot.omr_scanner; import test_grader_bot.sheet_generator; import test_grader_bot.excel_export; import test_grader_bot.config; print('All imports OK')\"",
+  "verification_instructions": "1. Install dependencies with pip. 2. Verify all modules import without errors. 3. Check Python syntax with py_compile on all .py files. 4. Verify no circular imports. 5. Run basic unit tests if created.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "1. cd /projects/sandbox/ufqbot 2. pip install -r test_grader_bot/requirements.txt",
+  "environment_constraints": "OPEN_INTERNET - full network access. Python 3.11 default. No .env file present (bot won't actually run without BOT_TOKEN), but code should be importable and syntactically valid.",
+  "contribution_requirements": "All user-facing text in Uzbek. Keep under 120MB RAM. No new heavy dependencies. JSON file storage. Python 3.10+ compatible.",
+  "key_patterns": {
+    "bot_architecture": "python-telegram-bot v20+ async Application with ConversationHandler. States defined as integer constants. Single ADMIN_ID access control.",
+    "session_storage": "JSON files in data/ directory. _load_session/_save_session pattern using user_id-keyed files.",
+    "omr_approach": "OpenCV: detect 4 corner markers -> perspective transform to fixed SHEET_WIDTH/SHEET_HEIGHT -> analyze bubble fill ratios with Otsu threshold per ROI",
+    "sheet_layout_constants": "All dimensions defined in sheet_generator.py and imported by omr_scanner.py: SHEET_WIDTH=2480, SHEET_HEIGHT=3508, BUBBLE_RADIUS=22, BUBBLE_SPACING_X=90, BUBBLE_SPACING_Y=80, etc.",
+    "student_numbers": "Two-row bubble section for tens (0-4) and units (0-9) digits, allowing numbers 1-50"
+  },
+  "relevant_files": [
+    "test_grader_bot/bot.py",
+    "test_grader_bot/config.py",
+    "test_grader_bot/omr_scanner.py",
+    "test_grader_bot/sheet_generator.py",
+    "test_grader_bot/excel_export.py",
+    "test_grader_bot/requirements.txt",
+    "test_grader_bot/deploy.sh"
+  ],
+  "directory_structure": "test_grader_bot/ - flat module structure: bot.py (main), config.py (settings), omr_scanner.py (CV processing), sheet_generator.py (PDF/image generation), excel_export.py (xlsx output), data/ (JSON session files)"
+}

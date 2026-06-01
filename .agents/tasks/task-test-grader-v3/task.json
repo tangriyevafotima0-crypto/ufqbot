@@ -1,0 +1,14 @@
+{
+  "task_id": "task-test-grader-v3",
+  "task_description": "Rewrite the Telegram test grader bot as V3 with execution-first approach. Key changes: roster + auto-naming to eliminate manual name typing, relative bubble detection for lighting-independent accuracy, forgiving OMR with multi-stage fallbacks, and QoL improvements (multi-admin, /edit command, document support).",
+  "status": "completed",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
+  "blocked_reason": null,
+  "verification": {
+    "build": "pass",
+    "tests": "pass",
+    "test_quality": "pass",
+    "docker_build": "skipped",
+    "summary": "All modules import successfully. All 5 Python files pass AST syntax checks. Excel generation produces valid output. OMR scanner handles errors gracefully with proper Uzbek error messages. Full integration test with imports of all modules from bot.py passes."
+  }
+}
