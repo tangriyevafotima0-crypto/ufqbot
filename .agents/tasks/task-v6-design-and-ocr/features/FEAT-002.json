@@ -1,0 +1,31 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Redesign sheet_generator.py layout for V6: improve title area spacing, add bordered name/surname fields, add visual separators between sections. CRITICAL: Do NOT change any constants (SHEET_WIDTH, SHEET_HEIGHT, MARKER_SIZE, MARKER_MARGIN, BUBBLE_RADIUS, BUBBLE_SPACING_X, BUBBLE_SPACING_Y, QUESTION_NUM_WIDTH, STUDENT_NUM_Y, STUDENT_NUM_BUBBLE_RADIUS, STUDENT_NUM_SPACING_X, STUDENT_NUM_SPACING_Y), corner marker positions, student number bubble positions, or answer bubble grid positions. Only change visual/text elements in areas the scanner does NOT read.",
+  "status": "completed",
+  "steps": [
+    "In test_grader_bot/sheet_generator.py, update the module docstring to mention V6 and the new design improvements",
+    "Redesign the title area: The title 'TEST JAVOB VARAQASI' is currently at TITLE_Y=180. This is above the NAME_Y=320 area. Add a horizontal separator line below the title to visually separate it from the name fields. You can adjust TITLE_Y (it is a local layout constant not used by the scanner) to give it more breathing room, but keep it above y=300",
+    "Redesign name/surname fields: Replace the current 'Ism: ____________________' and 'Familiya: ____________________' text at NAME_Y=320 with proper bordered rectangular boxes that students can write in. Draw a labeled box for 'Ism' (first name) and another for 'Familiya' (surname) with clear borders (rectangles drawn with draw.rectangle). The boxes should be approximately 800px wide and 60-70px tall, with the label above or to the left. These MUST stay entirely within y=280 to y=440 (below title, above STUDENT_NUM_Y=450)",
+    "Add a horizontal separator line between the name fields section and the student number section (around y=440-445) to visually separate them",
+    "Add a thin separator line between the student number section and the bubble grid (the existing code already does this in _draw_student_number_section, but ensure it is visually clear)",
+    "Update the footer text to mention V6",
+    "Verify the generated sheet by running: python -c 'from sheet_generator import generate_answer_sheet; img = generate_answer_sheet(30, 4); img.save(\"/tmp/test_sheet_v6.png\"); print(\"Sheet generated OK\")'"
+  ],
+  "acceptance_criteria": [
+    "Title has clear visual separation (line or spacing) from the name fields below",
+    "Name and surname fields are bordered rectangles/boxes instead of plain text with underscores",
+    "All sections (title, name fields, student number, bubble grid) have visual separators between them",
+    "NONE of the scanner-critical constants are changed: SHEET_WIDTH=2480, SHEET_HEIGHT=3508, MARKER_SIZE=50, MARKER_MARGIN=60, BUBBLE_RADIUS=22, BUBBLE_SPACING_X=90, BUBBLE_SPACING_Y=80, QUESTION_NUM_WIDTH=80, STUDENT_NUM_Y=450, STUDENT_NUM_BUBBLE_RADIUS=18, STUDENT_NUM_SPACING_X=70, STUDENT_NUM_SPACING_Y=55",
+    "Corner markers remain at exact same positions (MARKER_MARGIN offset from edges)",
+    "Student number bubble positions remain unchanged (base_x=350, section_start_y=STUDENT_NUM_Y+50=500)",
+    "Answer bubble grid start position calculation remains: STUDENT_NUM_Y + 50 + 2*STUDENT_NUM_SPACING_Y + 30 + 60 = 695",
+    "Sheet generates without errors"
+  ],
+  "verification": [
+    "Run: cd /projects/sandbox/ufqbot/test_grader_bot && python -c 'from sheet_generator import generate_answer_sheet; img = generate_answer_sheet(30, 4); img.save(\"/tmp/test_sheet_v6.png\"); print(\"OK\")'",
+    "Run: cd /projects/sandbox/ufqbot/test_grader_bot && python -c 'from sheet_generator import SHEET_WIDTH, SHEET_HEIGHT, MARKER_SIZE, MARKER_MARGIN, BUBBLE_RADIUS, BUBBLE_SPACING_X, BUBBLE_SPACING_Y, QUESTION_NUM_WIDTH, STUDENT_NUM_Y, STUDENT_NUM_BUBBLE_RADIUS, STUDENT_NUM_SPACING_X, STUDENT_NUM_SPACING_Y; assert SHEET_WIDTH==2480; assert SHEET_HEIGHT==3508; assert MARKER_SIZE==50; assert MARKER_MARGIN==60; assert BUBBLE_RADIUS==22; assert BUBBLE_SPACING_X==90; assert BUBBLE_SPACING_Y==80; assert QUESTION_NUM_WIDTH==80; assert STUDENT_NUM_Y==450; assert STUDENT_NUM_BUBBLE_RADIUS==18; assert STUDENT_NUM_SPACING_X==70; assert STUDENT_NUM_SPACING_Y==55; print(\"All constants verified\")'"
+  ],
+  "blocked_reason": null,
+  "findings": "NAME_Y constant removed since it was not imported by omr_scanner or any other file. All scanner-critical constants verified unchanged. Sheet generates without errors. Used python3.9 as documented in FEAT-001 findings."
+}

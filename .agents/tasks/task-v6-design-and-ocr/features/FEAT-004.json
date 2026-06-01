@@ -1,0 +1,27 @@
+{
+  "id": "FEAT-004",
+  "type": "chore",
+  "description": "Update all version strings from V5 to V6, update module docstrings, and commit all changes",
+  "status": "pending",
+  "steps": [
+    "In test_grader_bot/bot.py: Update the module docstring from 'V5' to 'V6', mention new features (improved sheet design, OCR name detection)",
+    "In test_grader_bot/omr_scanner.py: Update the module docstring from 'V5' to 'V6', mention OCR name detection integration",
+    "In test_grader_bot/sheet_generator.py: Ensure the docstring mentions V6 (may already be done in FEAT-002)",
+    "In test_grader_bot/config.py: If there is any version string, update it. If not, add a VERSION = 'V6' constant",
+    "Run final verification: cd /projects/sandbox/ufqbot/test_grader_bot && python -c 'from sheet_generator import generate_answer_sheet; from omr_scanner import scan_answer_sheet; from name_reader import read_name_from_image; import bot; print(\"All V6 modules OK\")'",
+    "Stage and commit all changes with message: 'feat: upgrade to V6 - improved sheet design and handwritten name OCR'"
+  ],
+  "acceptance_criteria": [
+    "All module docstrings reference V6",
+    "No references to V5 remain in docstrings (V5 can remain in historical comments explaining fixes)",
+    "All modules import successfully",
+    "Changes are committed on the feat/v6-design-and-ocr branch"
+  ],
+  "verification": [
+    "Run: cd /projects/sandbox/ufqbot/test_grader_bot && python -c 'from sheet_generator import generate_answer_sheet; from omr_scanner import scan_answer_sheet; from name_reader import read_name_from_image; print(\"All imports OK\")'",
+    "Run: cd /projects/sandbox/ufqbot && git log --oneline -3",
+    "Run: cd /projects/sandbox/ufqbot && git status (should show clean working tree)"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

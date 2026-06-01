@@ -1,0 +1,7 @@
+{
+  "task_id": "task-v6-design-and-ocr",
+  "task_description": "Upgrade test grader bot from V5 to V6 with improved answer sheet layout design, handwritten name OCR feature, and version string updates",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003", "FEAT-004"],
+  "blocked_reason": null
+}
