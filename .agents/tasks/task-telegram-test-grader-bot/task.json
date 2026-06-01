@@ -9,6 +9,6 @@
     "tests": "pass",
     "test_quality": "pass",
     "docker_build": "skipped",
-    "summary": "All modules import successfully after review fixes. Sheet generator produces correct A4 image (2480x3508). Excel export generates valid xlsx. OMR scanner returns error on missing markers. Bot module loads with access control and conversation fixes. deploy.sh secures .env."
+    "summary": "All modules import successfully. Sheet generator produces correct A4 image (2480x3508). Excel export generates valid xlsx. OMR pipeline correctly errors when corner markers not found and processes valid sheets end-to-end. Bot module loads with all handlers. All 7 issues from semantic review have been fixed: silent fallback replaced with error, session cleared on new test, questions capped at 74, .env has chmod 600, access control added, /results works inside scan conversation, unused import removed."
   }
 }
