@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "fix",
   "description": "Complete rewrite of the QR check-in system: simplify QR format, rewrite scanner handler, add scan_checkin() to crud.py, add auto_close_events() background task to main.py, update middleware bypass regex, and regenerate zip",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Step 1 - Simplify QR data format in ticket_generator.py: Change generate_qr_data() to produce the new format: https://t.me/{BOT_USERNAME}?start=checkin_{ticket_id}_{pin}. This requires ticket_id to be passed in. Update the function signature to accept ticket_id and pin instead of event_id/user_telegram_id/security_hash. The caller in crud.py create_ticket() must be updated accordingly (generate QR data AFTER ticket is committed and has an ID).",
     "Step 2 - Update crud.py create_ticket(): After the ticket is committed and has a primary key ID, call generate_qr_data(ticket.id, pin) to get the new-format QR data, then update the ticket's qr_data field. Remove the security_hash from the QR data generation (keep it in the DB for legacy but it's no longer used in QR).",
@@ -36,5 +36,5 @@
     "test -f /projects/sandbox/ufqbot/UFQ_SYSTEM_v3_fixed.zip && echo 'ZIP exists'"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All steps implemented successfully. generate_qr_data now takes (ticket_id, pin) and produces checkin_{id}_{pin} format. scan_checkin() and auto_close_events() added to crud.py. scanner.py deep link handler parses new format. Background task added to main.py. Middleware regex updated. All files parse and imports resolve correctly."
 }
