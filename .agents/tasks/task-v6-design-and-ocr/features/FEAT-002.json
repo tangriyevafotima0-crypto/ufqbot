@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "feat",
   "description": "Redesign sheet_generator.py layout for V6: improve title area spacing, add bordered name/surname fields, add visual separators between sections. CRITICAL: Do NOT change any constants (SHEET_WIDTH, SHEET_HEIGHT, MARKER_SIZE, MARKER_MARGIN, BUBBLE_RADIUS, BUBBLE_SPACING_X, BUBBLE_SPACING_Y, QUESTION_NUM_WIDTH, STUDENT_NUM_Y, STUDENT_NUM_BUBBLE_RADIUS, STUDENT_NUM_SPACING_X, STUDENT_NUM_SPACING_Y), corner marker positions, student number bubble positions, or answer bubble grid positions. Only change visual/text elements in areas the scanner does NOT read.",
-  "status": "pending",
+  "status": "in_progress",
   "steps": [
     "In test_grader_bot/sheet_generator.py, update the module docstring to mention V6 and the new design improvements",
     "Redesign the title area: The title 'TEST JAVOB VARAQASI' is currently at TITLE_Y=180. This is above the NAME_Y=320 area. Add a horizontal separator line below the title to visually separate it from the name fields. You can adjust TITLE_Y (it is a local layout constant not used by the scanner) to give it more breathing room, but keep it above y=300",
