@@ -409,168 +409,6 @@ async def create_ticket(user_tg_id: int, event_id: int):
     return ticket, ticket_image
 
 
-async def verify_and_checkin(security_hash: str, event_id: int, scanner_tg_id: int, expected_user_tg_id: int = None):
-    """QR code scan and check-in. Mix of raw queries and SQLAlchemy.
-    Returns (success, scanner_msg, extra_data_dict_or_None).
-    """
-    # Check scanner permissions via raw query
-    scanner = await get_user_by_tg_id(scanner_tg_id)
-    if not scanner:
-        return False, "Sizda skanerlash huquqi yo'q!", None
-
-    # Scanner must be CP or SUPER_ADMIN
-    is_admin = await is_user_admin(scanner_tg_id)
-    is_president = await is_user_president(scanner_tg_id)
-    if not is_admin and not is_president:
-        return False, "Sizda skanerlash huquqi yo'q!", None
-
-    async with AsyncSessionLocal() as session:
-        # Find ticket
-        ticket_result = await session.execute(
-            select(Ticket).where(
-                Ticket.security_hash == security_hash,
-                Ticket.event_id == event_id
-            )
-        )
-        ticket = ticket_result.scalars().first()
-
-        if not ticket:
-            logger.warning(
-                f"QR SCAN FAILED: Ticket not found. security_hash='{security_hash}', event_id={event_id}"
-            )
-            return False, "Noto'g'ri yoki yaroqsiz chipta!", None
-
-        # Already used?
-        if ticket.is_used:
-            logger.info(f"QR SCAN FAILED: Ticket already used. ticket_id={ticket.id}, used_at={ticket.used_at}")
-            used_time = ticket.used_at.strftime("%H:%M") if ticket.used_at else "noma'lum vaqt"
-            return False, f"Bu chipta allaqachon ishlatilgan!\nSkanerlangan vaqt: {used_time}", None
-
-        # Get event
-        event = await session.get(Event, event_id)
-        if not event:
-            return False, "Xatolik: Ma'lumot topilmadi", None
-
-        # Time-based scan validation (bug #1: UTC vaqtida taqqoslaymiz)
-        if event.event_date:
-            try:
-                if isinstance(event.event_date, str):
-                    event_dt = datetime.fromisoformat(event.event_date)
-                else:
-                    event_dt = event.event_date
-
-                scan_allowed_from = event_dt - timedelta(hours=2)
-                now = datetime.utcnow()
-
-                if now < scan_allowed_from:
-                    # Display time in Tashkent (UTC+5) for the user
-                    tashkent_dt = event_dt + timedelta(hours=5)
-                    formatted_date = tashkent_dt.strftime("%d.%m.%Y %H:%M")
-                    return False, f"Bu tadbir hali boshlanmagan!\nSkanerlash {formatted_date} dan 2 soat oldin boshlanadi (Toshkent vaqti).", None
-            except (ValueError, TypeError) as e:
-                logger.warning(f"Event date parsing error: {e}")
-
-        # Get ticket owner from shared table
-        async with get_db() as db:
-            cursor = await db.execute("SELECT * FROM users WHERE id=?", (ticket.user_id,))
-            user_row = await cursor.fetchone()
-            if not user_row:
-                return False, "Xatolik: Ma'lumot topilmadi", None
-            user_data = dict(user_row)
-
-        # BUG #2 FIX: Verify QR kod ichidagi user_tg_id chipta egasiga mos kelishini tekshirish
-        if expected_user_tg_id is not None:
-            if user_data['telegram_id'] != expected_user_tg_id:
-                logger.warning(
-                    f"user_tg_id mismatch: QR={expected_user_tg_id}, DB={user_data['telegram_id']}"
-                )
-                return False, "Noto'g'ri yoki yaroqsiz chipta!", None
-
-        # Check scanner can manage this event (same club or SUPER_ADMIN)
-        if not is_admin:
-            if event.club_id and scanner.get('club_id') != event.club_id:
-                logger.warning(
-                    f"QR SCAN FAILED: Club mismatch. scanner_club={scanner.get('club_id')}, event_club={event.club_id}"
-                )
-                return False, "Siz bu tadbirni boshqara olmaysiz!", None
-
-        # Find registration
-        reg_result = await session.execute(
-            select(Registration).where(
-                Registration.user_id == ticket.user_id,
-                Registration.event_id == event_id
-            )
-        )
-        registration = reg_result.scalars().first()
-
-        if not registration:
-            logger.warning(
-                f"QR SCAN FAILED: No registration. user_id={ticket.user_id}, event_id={event_id}"
-            )
-            return False, "Foydalanuvchi bu tadbirga ro'yxatdan o'tmagan!", None
-
-        # Perform check-in
-        ticket.is_used = True
-        ticket.used_at = datetime.utcnow()
-        registration.status = RegStatus.ATTENDED
-        registration.check_in_time = datetime.utcnow()
-        await session.commit()
-
-    # Update points and status in shared table (single connection for atomicity)
-    old_points = user_data.get('total_points', 0)
-    new_points = old_points + event.attendance_points
-    old_status = user_data.get('user_status', 'BRONZE')
-    new_status = calculate_user_status(new_points)
-
-    async with get_db() as db:
-        await db.execute(
-            "UPDATE users SET total_points = total_points + ? WHERE id=?",
-            (event.attendance_points, ticket.user_id)
-        )
-        if old_status != new_status:
-            await db.execute(
-                "UPDATE users SET user_status=? WHERE id=?",
-                (new_status, ticket.user_id)
-            )
-        await db.commit()
-
-    # Status change message
-    status_change_msg = ""
-    if old_status != new_status:
-        from bot.utils.status_manager import get_status_name_uz
-        old_name = get_status_name_uz(old_status)
-        new_name = get_status_name_uz(new_status)
-        status_change_msg = f"\n🎉 Status o'zgardi: {old_name} → {new_name}"
-
-    # BUG #8 FIX: Skaner uchun va foydalanuvchi uchun alohida xabarlar
-    scanner_msg = (
-        f"✅ Muvaffaqiyatli!\n\n"
-        f"👤 {user_data['full_name']}\n"
-        f"📅 {event.title}\n"
-        f"+{event.attendance_points} ball (Jami: {new_points}){status_change_msg}"
-    )
-
-    user_notify_msg = (
-        f"🎉 <b>Tabriklaymiz!</b>\n\n"
-        f"Siz <b>{event.title}</b> tadbiriga muvaffaqiyatli qatnashdingiz!\n\n"
-        f"<b>+{event.attendance_points} ball</b> qo'shildi\n"
-        f"Jami ballingiz: <b>{new_points}</b>"
-    )
-    if status_change_msg:
-        user_notify_msg += f"\n{status_change_msg}"
-
-    extra = {
-        'user_name': user_data['full_name'],
-        'user_tg_id': user_data['telegram_id'],
-        'att_pts': event.attendance_points,
-        'new_points': new_points,
-        'user_notify_msg': user_notify_msg,
-    }
-
-    logger.info(f"QR SCAN SUCCESS: ticket_id={ticket.id}, user={user_data['full_name']}, event={event.title}")
-
-    return True, scanner_msg, extra
-
 
 async def update_user_status_if_needed(telegram_id: int):
     """Update user_status in shared table based on total_points."""
@@ -621,6 +459,12 @@ async def scan_checkin(ticket_id: int, pin: str, scanner_tg_id: int):
             return False, "Tadbir topilmadi!", None
         if event.status != EventStatus.ACTIVE:
             return False, "Bu tadbir faol emas!", None
+
+        # Club-scope check: president can only scan events belonging to their club
+        if not is_admin:
+            scanner = await get_user_by_tg_id(scanner_tg_id)
+            if event.club_id and scanner and scanner.get('club_id') != event.club_id:
+                return False, "Siz bu tadbirni boshqara olmaysiz!", None
 
         # 6. Check time: if event.event_date is set, current time must be <= event_date + 1 hour
         now = datetime.utcnow()
@@ -733,8 +577,8 @@ async def auto_close_events():
                 total_attended = len(attended_regs)
 
             # b. For each attended registration: add points
-            for reg in attended_regs:
-                async with get_db() as db:
+            async with get_db() as db:
+                for reg in attended_regs:
                     cursor = await db.execute("SELECT * FROM users WHERE id=?", (reg.user_id,))
                     user_row = await cursor.fetchone()
                     if not user_row:
@@ -755,12 +599,12 @@ async def auto_close_events():
                             "UPDATE users SET user_status=? WHERE id=?",
                             (new_status, reg.user_id)
                         )
-                    await db.commit()
 
                     attendees_info.append({
                         'name': user['full_name'],
                         'points_given': event.attendance_points
                     })
+                await db.commit()
 
             # c. Mark event.status = EventStatus.COMPLETED
             async with AsyncSessionLocal() as session:

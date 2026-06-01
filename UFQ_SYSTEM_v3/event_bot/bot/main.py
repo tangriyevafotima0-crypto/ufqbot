@@ -48,11 +48,12 @@ async def auto_close_task(bot_instance):
                     except Exception as e:
                         logger.error(f"Report yuborishda xatolik (creator): {e}")
 
-                # Send to SUPER_ADMIN
-                try:
-                    await bot_instance.send_message(SUPER_ADMIN_ID, msg, parse_mode="HTML")
-                except Exception as e:
-                    logger.error(f"Report yuborishda xatolik (admin): {e}")
+                # Send to SUPER_ADMIN (only if creator is not already the super admin)
+                if report.get('creator_tg_id') != SUPER_ADMIN_ID:
+                    try:
+                        await bot_instance.send_message(SUPER_ADMIN_ID, msg, parse_mode="HTML")
+                    except Exception as e:
+                        logger.error(f"Report yuborishda xatolik (admin): {e}")
         except Exception as e:
             logger.error(f"Auto-close task xatoligi: {e}")
 
