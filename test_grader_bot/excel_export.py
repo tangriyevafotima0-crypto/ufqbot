@@ -27,7 +27,7 @@ def generate_results_excel(results: list) -> BytesIO:
     ws.title = "Natijalar"
 
     # Header row
-    headers = ["#", "Ism", "Familiya", "Ball", "Foiz"]
+    headers = ["#", "Ism", "Familiya", "Ball", "Foiz", "Javoblar"]
     header_font = Font(bold=True, size=12)
     for col, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=header)
@@ -40,6 +40,7 @@ def generate_results_excel(results: list) -> BytesIO:
     ws.column_dimensions["C"].width = 20
     ws.column_dimensions["D"].width = 10
     ws.column_dimensions["E"].width = 10
+    ws.column_dimensions["F"].width = 40
 
     # Sort results by score descending
     sorted_results = sorted(results, key=lambda x: x.get("score", 0), reverse=True)
@@ -51,12 +52,15 @@ def generate_results_excel(results: list) -> BytesIO:
         score = student.get("score", 0)
         total = student.get("total", 1)
         percentage = round((score / total) * 100, 1) if total > 0 else 0
+        answers = student.get("answers", [])
+        answers_str = "".join(str(a) for a in answers) if answers else ""
 
         ws.cell(row=rank + 1, column=1, value=rank)
         ws.cell(row=rank + 1, column=2, value=name)
         ws.cell(row=rank + 1, column=3, value=surname)
         ws.cell(row=rank + 1, column=4, value=f"{score}/{total}")
         ws.cell(row=rank + 1, column=5, value=f"{percentage}%")
+        ws.cell(row=rank + 1, column=6, value=answers_str)
 
     # Save to buffer
     buffer = BytesIO()

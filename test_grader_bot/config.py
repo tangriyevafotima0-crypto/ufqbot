@@ -14,3 +14,6 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 # Directory for storing session data as JSON
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True)
+
+# Maximum number of students per session
+MAX_STUDENTS = 50

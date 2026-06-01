@@ -24,6 +24,12 @@ BUBBLE_SPACING_Y = 80
 QUESTION_NUM_WIDTH = 80
 COLUMN_GAP = 200
 
+# Student number section settings
+STUDENT_NUM_Y = 450  # Y position for student number section
+STUDENT_NUM_BUBBLE_RADIUS = 18
+STUDENT_NUM_SPACING_X = 70
+STUDENT_NUM_SPACING_Y = 55
+
 
 def _draw_corner_markers(draw: ImageDraw.Draw) -> None:
     """Draw 4 filled black squares at corners for alignment detection."""
@@ -54,13 +60,75 @@ def _get_font(size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.load_default()
 
 
-def generate_answer_sheet(num_questions: int, num_options: int = 4) -> Image.Image:
+def _draw_student_number_section(draw: ImageDraw.Draw, start_y: int) -> int:
+    """
+    Draw a student number bubble section with 2 rows:
+    - Tens digit (0-4)
+    - Units digit (0-9)
+
+    Returns the Y position after this section.
+    """
+    label_font = _get_font(32)
+    bubble_font = _get_font(20)
+
+    # Section label
+    draw.text((200, start_y), "O'quvchi raqami:", fill="black", font=label_font)
+    start_y += 50
+
+    # Row labels and bubbles
+    rows = [
+        ("O'nlik:", list(range(5))),   # 0, 1, 2, 3, 4
+        ("Birlik:", list(range(10))),   # 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+    ]
+
+    row_label_font = _get_font(26)
+    base_x = 350  # Starting X for bubbles after label
+
+    for row_label, digits in rows:
+        draw.text((200, start_y - 10), row_label, fill="black", font=row_label_font)
+
+        for i, digit in enumerate(digits):
+            cx = base_x + i * STUDENT_NUM_SPACING_X
+            cy = start_y
+            r = STUDENT_NUM_BUBBLE_RADIUS
+
+            # Draw hollow circle
+            draw.ellipse(
+                [cx - r, cy - r, cx + r, cy + r],
+                outline="black", width=2
+            )
+            # Draw digit inside
+            digit_str = str(digit)
+            lbbox = draw.textbbox((0, 0), digit_str, font=bubble_font)
+            lw = lbbox[2] - lbbox[0]
+            lh = lbbox[3] - lbbox[1]
+            draw.text(
+                (cx - lw // 2, cy - lh // 2 - 2),
+                digit_str, fill="black", font=bubble_font
+            )
+
+        start_y += STUDENT_NUM_SPACING_Y
+
+    # Add separator line
+    start_y += 10
+    draw.line([(200, start_y), (SHEET_WIDTH - 200, start_y)], fill="gray", width=1)
+    start_y += 20
+
+    return start_y
+
+
+def generate_answer_sheet(
+    num_questions: int,
+    num_options: int = 4,
+    include_student_numbers: bool = True,
+) -> Image.Image:
     """
     Generate an A4 answer sheet image.
 
     Args:
         num_questions: Number of questions (1-100)
         num_options: Number of answer options per question (2-5, default 4)
+        include_student_numbers: Whether to include student number bubbles
 
     Returns:
         PIL Image object of the answer sheet
@@ -93,10 +161,17 @@ def generate_answer_sheet(num_questions: int, num_options: int = 4) -> Image.Ima
     draw.text((200, NAME_Y), "Ism: ____________________", fill="black", font=field_font)
     draw.text((200, NAME_Y + 80), "Familiya: ____________________", fill="black", font=field_font)
 
+    # Student number section
+    if include_student_numbers:
+        grid_start = _draw_student_number_section(draw, STUDENT_NUM_Y)
+    else:
+        grid_start = GRID_START_Y
+
     # Info line
     info_font = _get_font(36)
     info_text = f"Savollar soni: {num_questions}   Variantlar: {option_letters}"
-    draw.text((200, NAME_Y + 180), info_text, fill="black", font=info_font)
+    draw.text((200, grid_start), info_text, fill="black", font=info_font)
+    grid_start += 60
 
     # Determine layout: 2 columns if more than 20 questions
     use_two_columns = num_questions > 20
@@ -142,12 +217,12 @@ def generate_answer_sheet(num_questions: int, num_options: int = 4) -> Image.Ima
 
     # Draw column 1
     for i in range(col1_count):
-        y = GRID_START_Y + i * BUBBLE_SPACING_Y
+        y = grid_start + i * BUBBLE_SPACING_Y
         draw_question_row(i + 1, col1_x, y)
 
     # Draw column 2
     for i in range(col2_count):
-        y = GRID_START_Y + i * BUBBLE_SPACING_Y
+        y = grid_start + i * BUBBLE_SPACING_Y
         draw_question_row(col1_count + i + 1, col2_x, y)
 
     # Footer
