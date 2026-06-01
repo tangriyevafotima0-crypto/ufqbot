@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "feat",
   "description": "Rewrite sheet_generator.py to use ArUco markers + QR code, rewrite omr_scanner.py to use ArUco-based detection with QR fallback, and update requirements.txt",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Step 1: Update requirements.txt - Add 'qrcode[pil]' to the existing requirements list, keeping all current packages.",
 
@@ -32,5 +32,5 @@
     "Run: python3 omr_scanner.py - the self-test should detect filled bubbles correctly and print passing results"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "Self-test passes perfectly: 10/10 score detection and student number 12 correctly identified. ArUco detection works on first attempt without needing rotation fallback. The hex escape \\x27 was needed for apostrophes in Uzbek error messages when writing via Python scripts."
 }
