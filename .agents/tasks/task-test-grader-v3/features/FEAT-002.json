@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "feat",
   "description": "Rewrite config.py for multi-admin support and excel_export.py to include student number column. Update deploy.sh to support ADMIN_IDS.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "1. Rewrite test_grader_bot/config.py:",
     "   - Keep BOT_TOKEN loading from .env",
@@ -34,5 +34,5 @@
     "cd /projects/sandbox/ufqbot && python -c \"import ast; ast.parse(open('test_grader_bot/config.py').read()); ast.parse(open('test_grader_bot/excel_export.py').read()); print('Syntax OK')\""
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "Also updated bot.py to import ADMIN_IDS (list) instead of ADMIN_ID (int) and changed the admin check to use 'in' operator. All verification passed. The __pycache__ directory was not committed."
 }
