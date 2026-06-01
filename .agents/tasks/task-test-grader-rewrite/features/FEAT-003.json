@@ -2,7 +2,7 @@
   "id": "FEAT-003",
   "type": "fix",
   "description": "Address semantic review findings: test ID race condition, missing-key crash guard, ephemeral active_test_id persistence, double preprocessing, detect_student_number recomputation, and auto-rotation order",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Fix _generate_test_id() to atomically claim the file using os.O_CREAT | os.O_EXCL with retry",
     "Add missing-key guard at top of _process_scan_image after loading test_data",
@@ -28,5 +28,5 @@
     "cd /projects/sandbox/ufqbot/test_grader_bot && python -c 'import bot; assert hasattr(bot, \"_get_active_test_id\"); assert hasattr(bot, \"_set_active_test_id\"); print(\"Persistence helpers exist\")'"
   ],
   "blocked_reason": null,
-  "findings": null
+  "findings": "All 5 review issues fixed plus the bonus rotation order change. All verification checks pass. The bot remains lightweight - no new dependencies added. The persistence helpers use simple JSON files in the data/ directory (one per user), keeping memory usage minimal for the 2GB server."
 }
