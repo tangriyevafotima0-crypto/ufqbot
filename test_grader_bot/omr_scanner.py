@@ -208,10 +208,9 @@ def _detect_corner_markers(gray: np.ndarray) -> Optional[np.ndarray]:
     Returns ordered corner points (centers) or None if all strategies fail.
     """
     h, w = gray.shape
-    preprocessed = _preprocess_image(gray)
 
     # Strategy 1: Standard Otsu threshold
-    _, binary_otsu = cv2.threshold(preprocessed, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    _, binary_otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     candidates = _find_square_markers(binary_otsu, gray)
     result = _select_best_four_corners(candidates, w, h)
     if result is not None:
@@ -228,7 +227,7 @@ def _detect_corner_markers(gray: np.ndarray) -> Optional[np.ndarray]:
     # Strategy 3: Multiple manual threshold values
     all_candidates = []
     for thresh_val in [80, 100, 120, 140]:
-        _, binary_manual = cv2.threshold(preprocessed, thresh_val, 255, cv2.THRESH_BINARY_INV)
+        _, binary_manual = cv2.threshold(gray, thresh_val, 255, cv2.THRESH_BINARY_INV)
         candidates = _find_square_markers(binary_manual, gray)
         result = _select_best_four_corners(candidates, w, h)
         if result is not None:
@@ -273,7 +272,7 @@ def _detect_corner_markers(gray: np.ndarray) -> Optional[np.ndarray]:
                 return result
 
     # Strategy 5: Largest contour approach (find paper boundary)
-    _, binary_paper = cv2.threshold(preprocessed, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    _, binary_paper = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     binary_inv = cv2.bitwise_not(binary_paper)
     contours, _ = cv2.findContours(binary_inv, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -541,24 +540,28 @@ def _get_bubble_positions(num_questions: int, num_options: int, grid_start_y: in
     return positions
 
 
-def detect_student_number(warped_gray: np.ndarray) -> Optional[int]:
+def detect_student_number(warped_gray: np.ndarray, binary_adaptive: np.ndarray = None, binary_otsu: np.ndarray = None) -> Optional[int]:
     """
     Detect the student number from the student number bubble section.
     Uses multi-method consensus for each row (tens and units).
 
     Args:
         warped_gray: Grayscale perspective-corrected image
+        binary_adaptive: Pre-computed adaptive threshold binary (optional)
+        binary_otsu: Pre-computed Otsu threshold binary (optional)
 
     Returns:
         Detected student number (1-50) or None if not detected
     """
-    # Create both binary images for the warped sheet
-    blurred = cv2.GaussianBlur(warped_gray, (5, 5), 0)
-    binary_adaptive = cv2.adaptiveThreshold(
-        blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY_INV, blockSize=51, C=10
-    )
-    _, binary_otsu = cv2.threshold(warped_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    # Create binary images only if not provided
+    if binary_adaptive is None:
+        blurred = cv2.GaussianBlur(warped_gray, (5, 5), 0)
+        binary_adaptive = cv2.adaptiveThreshold(
+            blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY_INV, blockSize=51, C=10
+        )
+    if binary_otsu is None:
+        _, binary_otsu = cv2.threshold(warped_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
     section_start_y = STUDENT_NUM_Y + 50
     base_x = 350
@@ -659,8 +662,8 @@ def scan_answer_sheet(
     corners = _detect_corner_markers(preprocessed)
 
     if corners is None:
-        # Auto-rotation: try 90, 180, 270 degree rotations
-        for angle in [90, 180, 270]:
+        # Auto-rotation: try common orientations (180 most common mistake first)
+        for angle in [180, 90, 270]:
             if angle == 90:
                 rotated = cv2.rotate(preprocessed, cv2.ROTATE_90_CLOCKWISE)
                 rotated_img = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
@@ -709,7 +712,7 @@ def scan_answer_sheet(
 
     # Detect student number if enabled
     if include_student_numbers:
-        student_num = detect_student_number(warped_gray)
+        student_num = detect_student_number(warped_gray, binary_adaptive, binary_otsu)
         result["student_number"] = student_num
 
     # Calculate grid start Y based on whether student numbers are included

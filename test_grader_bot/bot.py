@@ -12,6 +12,8 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
+from typing import Optional
+
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -54,19 +56,35 @@ logger = logging.getLogger(__name__)
 
 
 def _generate_test_id() -> str:
-    """Generate unique test ID like test_001, test_002, etc."""
-    existing = list(TESTS_DIR.glob("test_*.json"))
-    if not existing:
-        return "test_001"
-    nums = []
-    for p in existing:
+    """Generate unique test ID, atomically claiming it."""
+    for attempt in range(100):
+        existing = list(TESTS_DIR.glob("test_*.json"))
+        if not existing:
+            next_num = 1
+        else:
+            nums = []
+            for p in existing:
+                try:
+                    num = int(p.stem.split("_")[1])
+                    nums.append(num)
+                except (ValueError, IndexError):
+                    pass
+            next_num = max(nums) + 1 if nums else 1
+
+        next_num += attempt  # Increment on retry
+        test_id = f"test_{next_num:03d}"
+        path = TESTS_DIR / f"{test_id}.json"
+
         try:
-            num = int(p.stem.split("_")[1])
-            nums.append(num)
-        except (ValueError, IndexError):
-            pass
-    next_num = max(nums) + 1 if nums else 1
-    return f"test_{next_num:03d}"
+            # Atomically create file - fails if exists
+            fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+            return test_id
+        except FileExistsError:
+            continue
+
+    # Fallback with timestamp
+    return f"test_{int(datetime.now().timestamp())}"
 
 
 def _get_test_path(test_id: str) -> Path:
@@ -106,6 +124,40 @@ def _list_tests() -> list:
         except (json.JSONDecodeError, ValueError, OSError):
             continue
     return tests
+
+
+# ============================================================
+# Active test persistence helpers
+# ============================================================
+
+
+def _get_active_test_id(user_id: int, context_user_data: dict) -> Optional[str]:
+    """Get active test ID from memory or disk."""
+    # Check memory first
+    test_id = context_user_data.get("active_test_id")
+    if test_id:
+        return test_id
+    # Check disk
+    path = DATA_DIR / f"active_{user_id}.json"
+    if path.exists():
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+            test_id = data.get("test_id")
+            if test_id:
+                context_user_data["active_test_id"] = test_id
+                return test_id
+        except (json.JSONDecodeError, OSError):
+            pass
+    return None
+
+
+def _set_active_test_id(user_id: int, test_id: str, context_user_data: dict) -> None:
+    """Save active test ID to memory and disk."""
+    context_user_data["active_test_id"] = test_id
+    path = DATA_DIR / f"active_{user_id}.json"
+    with open(path, "w") as f:
+        json.dump({"test_id": test_id}, f)
 
 
 # ============================================================
@@ -287,7 +339,7 @@ async def receive_answers(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         "students": [],
     }
     _save_test(test_id, test_data)
-    context.user_data["active_test_id"] = test_id
+    _set_active_test_id(update.effective_user.id, test_id, context.user_data)
 
     # Generate answer sheet
     await update.message.reply_text("Javob varaqasi tayyorlanmoqda...")
@@ -351,7 +403,7 @@ async def receive_roster_text(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return AWAITING_ROSTER
 
-    test_id = context.user_data.get("active_test_id")
+    test_id = _get_active_test_id(update.effective_user.id, context.user_data)
     if not test_id:
         await update.message.reply_text(
             "Avval /new_test yoki /use_test bilan test tanlang."
@@ -403,7 +455,7 @@ async def receive_roster_document(update: Update, context: ContextTypes.DEFAULT_
         )
         return AWAITING_ROSTER
 
-    test_id = context.user_data.get("active_test_id")
+    test_id = _get_active_test_id(update.effective_user.id, context.user_data)
     if not test_id:
         await update.message.reply_text(
             "Avval /new_test yoki /use_test bilan test tanlang."
@@ -430,7 +482,7 @@ async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     if not await _check_admin(update):
         return ConversationHandler.END
 
-    test_id = context.user_data.get("active_test_id")
+    test_id = _get_active_test_id(update.effective_user.id, context.user_data)
     if not test_id:
         await update.message.reply_text(
             "Avval /new_test yoki /use_test bilan test tanlang."
@@ -493,8 +545,15 @@ async def names_first_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def _process_scan_image(tmp_path: str, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Process a scanned image (shared logic for photos and documents in batch mode)."""
-    test_id = context.user_data.get("active_test_id")
+    test_id = _get_active_test_id(update.effective_user.id, context.user_data)
     test_data = _load_test(test_id)
+
+    if not test_data or "num_questions" not in test_data:
+        os.unlink(tmp_path)
+        await update.message.reply_text(
+            "Xatolik: test ma'lumotlari topilmadi. /use_test bilan qayta tanlang."
+        )
+        return BATCH_SCANNING
 
     current_count = len(test_data.get("students", []))
     auto_count = context.user_data.get("auto_saved_count", 0)
@@ -684,7 +743,7 @@ async def _ask_batch_name(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     if idx >= len(unidentified):
         # All named
-        test_id = context.user_data.get("active_test_id")
+        test_id = _get_active_test_id(update.effective_user.id, context.user_data)
         test_data = _load_test(test_id)
         total_students = len(test_data.get("students", []))
         await update.message.reply_text(
@@ -729,7 +788,7 @@ async def receive_batch_name(update: Update, context: ContextTypes.DEFAULT_TYPE)
     unidentified = context.user_data.get("unidentified_results", [])
     result = unidentified[idx]
 
-    test_id = context.user_data.get("active_test_id")
+    test_id = _get_active_test_id(update.effective_user.id, context.user_data)
     test_data = _load_test(test_id)
 
     student_record = {
@@ -773,7 +832,7 @@ async def receive_uncertain_answers(update: Update, context: ContextTypes.DEFAUL
     """Receive manual answers for uncertain questions."""
     text = update.message.text.strip().upper()
 
-    test_id = context.user_data.get("active_test_id")
+    test_id = _get_active_test_id(update.effective_user.id, context.user_data)
     test_data = _load_test(test_id)
     student_idx = context.user_data.get("uncertain_student_idx")
     num_options = test_data.get("num_options", 4)
@@ -854,7 +913,7 @@ async def receive_scan_photo(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return AWAITING_SCAN_PHOTO
 
-    test_id = context.user_data.get("active_test_id")
+    test_id = _get_active_test_id(update.effective_user.id, context.user_data)
     test_data = _load_test(test_id)
 
     if len(test_data.get("students", [])) >= MAX_STUDENTS:
@@ -926,7 +985,7 @@ async def receive_student_name(update: Update, context: ContextTypes.DEFAULT_TYP
     surname = parts[1] if len(parts) > 1 else ""
 
     user_id = update.effective_user.id
-    test_id = context.user_data.get("active_test_id")
+    test_id = _get_active_test_id(update.effective_user.id, context.user_data)
     test_data = _load_test(test_id)
     result = context.user_data.get("last_scan_result", {})
 
@@ -972,7 +1031,7 @@ async def edit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not await _check_admin(update):
         return
 
-    test_id = context.user_data.get("active_test_id")
+    test_id = _get_active_test_id(update.effective_user.id, context.user_data)
     if not test_id:
         await update.message.reply_text(
             "Avval /new_test yoki /use_test bilan test tanlang."
@@ -1058,7 +1117,7 @@ async def results_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not await _check_admin(update):
         return ConversationHandler.END
 
-    test_id = context.user_data.get("active_test_id")
+    test_id = _get_active_test_id(update.effective_user.id, context.user_data)
     if not test_id:
         await update.message.reply_text(
             "Avval /new_test yoki /use_test bilan test tanlang."
@@ -1091,7 +1150,7 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     if not await _check_admin(update):
         return ConversationHandler.END
 
-    test_id = context.user_data.get("active_test_id")
+    test_id = _get_active_test_id(update.effective_user.id, context.user_data)
     if not test_id:
         await update.message.reply_text(
             "Avval /new_test yoki /use_test bilan test tanlang."
@@ -1197,7 +1256,7 @@ async def use_test_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.message.reply_text(f"Test '{test_id}' topilmadi. /tests bilan ro'yxatni ko'ring.")
         return ConversationHandler.END
 
-    context.user_data["active_test_id"] = test_id
+    _set_active_test_id(update.effective_user.id, test_id, context.user_data)
     num_q = test_data.get("num_questions", 0)
     num_students = len(test_data.get("students", []))
     await update.message.reply_text(

@@ -1,0 +1,32 @@
+{
+  "id": "FEAT-003",
+  "type": "fix",
+  "description": "Address semantic review findings: test ID race condition, missing-key crash guard, ephemeral active_test_id persistence, double preprocessing, detect_student_number recomputation, and auto-rotation order",
+  "status": "in_progress",
+  "steps": [
+    "Fix _generate_test_id() to atomically claim the file using os.O_CREAT | os.O_EXCL with retry",
+    "Add missing-key guard at top of _process_scan_image after loading test_data",
+    "Add _get_active_test_id and _set_active_test_id helpers for disk persistence of active test",
+    "Replace all context.user_data.get('active_test_id') with _get_active_test_id calls",
+    "Replace all context.user_data['active_test_id'] = ... with _set_active_test_id calls",
+    "Remove _preprocess_image call inside _detect_corner_markers (already preprocessed by caller)",
+    "Add binary_adaptive and binary_otsu optional params to detect_student_number",
+    "Pass pre-computed binary images from scan_answer_sheet to detect_student_number",
+    "Change auto-rotation order from [90, 180, 270] to [180, 90, 270]"
+  ],
+  "acceptance_criteria": [
+    "bot.py imports successfully",
+    "omr_scanner.py imports successfully",
+    "_get_active_test_id and _set_active_test_id helpers exist in bot.py",
+    "detect_student_number signature includes binary_adaptive and binary_otsu params",
+    "_detect_corner_markers does not call _preprocess_image internally",
+    "_generate_test_id uses os.O_CREAT | os.O_EXCL for atomic file creation"
+  ],
+  "verification": [
+    "cd /projects/sandbox/ufqbot/test_grader_bot && python -c 'import bot; import omr_scanner; print(\"OK\")'",
+    "cd /projects/sandbox/ufqbot/test_grader_bot && python -c 'from omr_scanner import scan_answer_sheet, detect_student_number; import inspect; sig = inspect.signature(detect_student_number); print(sig); assert \"binary_adaptive\" in str(sig)'",
+    "cd /projects/sandbox/ufqbot/test_grader_bot && python -c 'import bot; assert hasattr(bot, \"_get_active_test_id\"); assert hasattr(bot, \"_set_active_test_id\"); print(\"Persistence helpers exist\")'"
+  ],
+  "blocked_reason": null,
+  "findings": null
+}
