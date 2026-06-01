@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "fix",
   "description": "Fix QR code scanning not working - multiple issues causing 'Noto'g'ri yoki yaroqsiz chipta!' error for both Super Admin and Club President scanners",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Step 1: Fix deploy.sh BOT_USERNAME prompt confusion. The prompt says 'Bot Username (masalan: UFQ_JAMOA_BOT)' which uses the TEAM bot as example. This causes users to enter the team bot username instead of event bot username. The QR code deep link opens the wrong bot and scanning fails completely. Split into two separate prompts: TEAM_BOT_USERNAME and EVENT_BOT_USERNAME. Only EVENT_BOT_USERNAME is used in event_bot/.env. Add validation that BOT_USERNAME must not be empty.",
     "Step 2: Fix scanner.py hash parsing to be robust against edge cases. Currently `parts = args.split('_')` then `security_hash = parts[3][1:]`. If for ANY reason there are more than 4 parts (e.g., future format changes), the hash gets truncated. Fix: join all parts from index 3 onward, then strip the 'S' prefix. Also add explicit format validation (check parts[1] starts with 'E', parts[2] starts with 'U', parts[3] starts with 'S').",
@@ -31,5 +31,5 @@
     "Verify UFQ_SYSTEM_v3_fixed.zip exists and is non-empty"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All 6 steps implemented successfully. py_compile and AST parse passed for all modified .py files. ZIP regenerated (52KB). deploy.sh now uses separate TEAM_BOT_USERNAME and EVENT_BOT_USERNAME prompts with validation."
 }
