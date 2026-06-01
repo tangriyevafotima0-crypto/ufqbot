@@ -549,6 +549,9 @@ async def checkin_by_pin(pin: str, scanner_tg_id: int):
 
     # Delegate to scan_checkin which does full validation
     return await scan_checkin(ticket_id=ticket_id, pin=pin, scanner_tg_id=scanner_tg_id)
+
+
+async def auto_close_events():
     """Close expired events and distribute points. Returns list of report dicts."""
     reports = []
     now = datetime.utcnow()
