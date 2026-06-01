@@ -20,8 +20,10 @@ def generate_security_hash(user_id: int, event_id: int, pin: str, timestamp: str
 
 
 def generate_qr_data(ticket_id: int, pin: str):
-    """QR kod uchun deep link yaratish"""
-    return f"https://t.me/{BOT_USERNAME}?start=checkin_{ticket_id}_{pin}"
+    """QR kod uchun deep link yaratish. Bot username runtime'da aniqlanadi."""
+    from bot.utils.runtime import get_bot_username
+    username = get_bot_username() or BOT_USERNAME
+    return f"https://t.me/{username}?start=checkin_{ticket_id}_{pin}"
 
 
 def get_status_badge(points: int):

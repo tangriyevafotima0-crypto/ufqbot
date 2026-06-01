@@ -88,6 +88,12 @@ async def main():
 
     # Webhook ni o'chirish va polling ni boshlash
     await bot.delete_webhook(drop_pending_updates=True)
+
+    me = await bot.get_me()
+    from bot.utils.runtime import set_bot_username
+    set_bot_username(me.username)
+    logger.info(f"Bot username auto-detected: @{me.username}")
+
     logger.info("Polling rejimida ishlamoqda...")
     asyncio.create_task(auto_close_task(bot))
     await dp.start_polling(bot)

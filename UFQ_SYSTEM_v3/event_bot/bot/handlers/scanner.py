@@ -1,11 +1,18 @@
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command, CommandStart, CommandObject
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from bot.database.crud import scan_checkin, get_user_by_tg_id, is_user_president, is_user_admin
+from bot.database.crud import checkin_by_pin
 import logging
 
 scanner_router = Router()
 logger = logging.getLogger(__name__)
+
+
+class ScanState(StatesGroup):
+    waiting_for_pin = State()
 
 
 @scanner_router.message(CommandStart(deep_link=True))
@@ -72,7 +79,7 @@ async def handle_deep_link(message: Message, command: CommandObject):
 
 
 @scanner_router.message(Command("scan"))
-async def scan_command(message: Message):
+async def scan_command(message: Message, state: FSMContext):
     """Skanerlash boshlash komandasi"""
     is_admin = await is_user_admin(message.from_user.id)
     is_pres = await is_user_president(message.from_user.id)
@@ -82,11 +89,40 @@ async def scan_command(message: Message):
 
     await message.answer(
         "<b>QR-Kod Skanerlash</b>\n\n"
-        "Foydalanuvchining chiptasidagi QR-kodni telefon kamerangiz bilan skanerlang.\n\n"
-        "<i>Telefon kamerasini QR-kodga tutganingizda, Telegram avtomatik ravishda "
-        "havolani ochadi va bot skanerlashni amalga oshiradi.</i>",
+        "Variant 1: Foydalanuvchining QR-kodini telefon kamerangiz bilan skanerlang.\n\n"
+        "Variant 2: Chiptadagi 6 xonali PIN kodni shu yerga yozing.\n\n"
+        "Bekor qilish uchun /cancel bosing.",
         parse_mode="HTML"
     )
+    await state.set_state(ScanState.waiting_for_pin)
+
+
+@scanner_router.message(ScanState.waiting_for_pin)
+async def process_pin_entry(message: Message, state: FSMContext):
+    if message.text and message.text.strip() == "/cancel":
+        await state.clear()
+        return await message.answer("Bekor qilindi.")
+    if not message.text or not message.text.strip().isdigit() or len(message.text.strip()) != 6:
+        return await message.answer("Iltimos, 6 xonali PIN kodni kiriting yoki /cancel bosing.")
+
+    pin = message.text.strip()
+    success, msg, extra = await checkin_by_pin(pin=pin, scanner_tg_id=message.from_user.id)
+
+    if success:
+        await message.answer(f"<b>CHECK-IN MUVAFFAQIYATLI!</b>\n\n{msg}", parse_mode="HTML")
+        try:
+            if extra and extra.get('user_tg_id'):
+                await message.bot.send_message(
+                    extra['user_tg_id'],
+                    f"Siz check-in qilindingiz!\n\nTadbir: {extra['event_title']}",
+                    parse_mode="HTML"
+                )
+        except Exception as e:
+            logger.error(f"Foydalanuvchiga xabar yuborishda xatolik: {e}")
+        await state.clear()
+    else:
+        # Keep state so they can retry, but show the error
+        await message.answer(f"{msg}\n\nQayta urinib ko'ring yoki /cancel bosing.", parse_mode="HTML")
 
 
 @scanner_router.message(Command("mytickets"))

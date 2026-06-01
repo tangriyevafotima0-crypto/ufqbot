@@ -460,11 +460,14 @@ async def scan_checkin(ticket_id: int, pin: str, scanner_tg_id: int):
         if event.status != EventStatus.ACTIVE:
             return False, "Bu tadbir faol emas!", None
 
-        # Club-scope check: president can only scan events belonging to their club
+        # Club-scope check: president can only scan events belonging to their club.
+        # SUPER_ADMIN bypasses this. If event has no club_id, any president allowed.
         if not is_admin:
             scanner = await get_user_by_tg_id(scanner_tg_id)
-            if event.club_id and scanner and scanner.get('club_id') != event.club_id:
-                return False, "Siz bu tadbirni boshqara olmaysiz!", None
+            scanner_club = scanner.get('club_id') if scanner else None
+            logger.info(f"CHECKIN club-scope: scanner_club={scanner_club}, event_club={event.club_id}")
+            if event.club_id and scanner_club != event.club_id:
+                return False, "Siz bu tadbirni boshqara olmaysiz! (Boshqa klub tadbiri)", None
 
         # 6. Check time: if event.event_date is set, current time must be <= event_date + 1 hour
         now = datetime.utcnow()
@@ -526,7 +529,26 @@ async def scan_checkin(ticket_id: int, pin: str, scanner_tg_id: int):
     return True, scanner_message, extra_data
 
 
-async def auto_close_events():
+async def checkin_by_pin(pin: str, scanner_tg_id: int):
+    """Manual check-in by PIN. Finds ticket by PIN then delegates to scan_checkin."""
+    # Permission check first
+    is_admin = await is_user_admin(scanner_tg_id)
+    is_president = await is_user_president(scanner_tg_id)
+    if not is_admin and not is_president:
+        return False, "Sizda skanerlash huquqi yo'q!", None
+
+    # Find ticket by PIN (ticket_pin is unique)
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Ticket).where(Ticket.ticket_pin == pin)
+        )
+        ticket = result.scalars().first()
+        if not ticket:
+            return False, "Bunday PIN kodli chipta topilmadi!", None
+        ticket_id = ticket.id
+
+    # Delegate to scan_checkin which does full validation
+    return await scan_checkin(ticket_id=ticket_id, pin=pin, scanner_tg_id=scanner_tg_id)
     """Close expired events and distribute points. Returns list of report dicts."""
     reports = []
     now = datetime.utcnow()
