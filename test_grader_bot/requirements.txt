@@ -4,3 +4,4 @@ Pillow
 openpyxl
 numpy
 python-dotenv
+qrcode[pil]

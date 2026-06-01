@@ -1,0 +1,36 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Rewrite sheet_generator.py to use ArUco markers + QR code, rewrite omr_scanner.py to use ArUco-based detection with QR fallback, and update requirements.txt",
+  "status": "in_progress",
+  "steps": [
+    "Step 1: Update requirements.txt - Add 'qrcode[pil]' to the existing requirements list, keeping all current packages.",
+
+    "Step 2: Rewrite sheet_generator.py - Replace the 4 plain black corner squares with ArUco markers (cv2.aruco dictionary DICT_4X4_50, IDs 0=top-left, 1=top-right, 2=bottom-right, 3=bottom-left). Each marker should be ~80x80 pixels on the A4 sheet. Use cv2.aruco.generateImageMarker() to create each marker image, then paste it onto the PIL Image using Image.fromarray(). Add a QR code at the top of the sheet (between title and name fields, or in a suitable location) encoding JSON metadata: {\"test_id\": \"<random_id>\", \"num_questions\": N, \"num_options\": M}. Use the qrcode library to generate it. Keep all existing exported constants (SHEET_WIDTH, SHEET_HEIGHT, MARKER_SIZE, MARKER_MARGIN, GRID_START_Y, BUBBLE_RADIUS, BUBBLE_SPACING_X, BUBBLE_SPACING_Y, QUESTION_NUM_WIDTH, STUDENT_NUM_Y, STUDENT_NUM_BUBBLE_RADIUS, STUDENT_NUM_SPACING_X, STUDENT_NUM_SPACING_Y) - omr_scanner imports these. Update MARKER_SIZE to 80 (from 50) since ArUco needs more pixels to be reliably detected. Keep the generate_answer_sheet() function signature exactly the same: (num_questions, num_options=4, include_student_numbers=True) -> Image.Image. Keep the student number section, bubble grid, two-column layout, footer, everything else. Keep all text in Uzbek.",
+
+    "Step 3: Completely rewrite omr_scanner.py - The new scanner must: (a) Use cv2.aruco.ArucoDetector with DICT_4X4_50 to detect the 4 corner markers (IDs 0,1,2,3). The detector returns the 4 corners of each marker - use the center of each marker's corners as the reference point. (b) Map detected marker centers to their known positions on the generated sheet (same as the drawing positions in sheet_generator). Compute perspective transform using cv2.getPerspectiveTransform(). (c) After warping, use the same absolute coordinate system as the sheet layout to locate bubbles (since the warp maps to exact sheet coordinates). (d) Keep the 3-method consensus voting approach (Methods A, B, C) exactly as they work now - these are proven reliable for bubble detection once the image is properly aligned. (e) Keep the student number detection logic. (f) Add a QR code fallback: if ArUco detection fails (< 4 markers found), try cv2.QRCodeDetector().detectAndDecode() - if it returns corner points, use those plus any found ArUco markers to estimate alignment. (g) Keep the auto-rotation fallback (try 90/180/270 if initial detection fails). (h) The scan_answer_sheet() function signature and return dict format must remain exactly the same. (i) Import constants from sheet_generator as before. (j) Error messages remain in Uzbek. (k) Add a strategy for 3-corner estimation (if only 3 ArUco markers detected, estimate the 4th using parallelogram geometry - similar to current _estimate_fourth_corner). (l) The preprocessing pipeline (_preprocess_image) can be simplified or adjusted since ArUco detection is already robust to noise, but keep it for the bubble detection phase.",
+
+    "Step 4: Write a self-test at the end of omr_scanner.py that validates the full pipeline: generate a sheet, programmatically fill in specific bubbles (draw filled circles at known positions), save the image, scan it with scan_answer_sheet(), and assert the detected answers match. This should be guarded by if __name__ == '__main__' so it only runs when executed directly, not when imported by bot.py."
+  ],
+  "acceptance_criteria": [
+    "requirements.txt includes qrcode[pil] alongside existing packages",
+    "sheet_generator.py generates an A4 sheet with 4 ArUco markers (IDs 0-3) at corners instead of plain black squares",
+    "sheet_generator.py includes a QR code with test metadata on the generated sheet",
+    "generate_answer_sheet() function signature unchanged: (num_questions, num_options=4, include_student_numbers=True) -> Image.Image",
+    "omr_scanner.py uses cv2.aruco.ArucoDetector for marker detection instead of contour-based square detection",
+    "omr_scanner.py has QR code fallback when ArUco detection fails",
+    "omr_scanner.py keeps 3-method consensus voting for bubble fill detection",
+    "scan_answer_sheet() function signature and return dict format unchanged",
+    "All exported constants from sheet_generator remain available for import",
+    "Running the self-test (python3 omr_scanner.py) produces correct detection results on a synthetically filled sheet",
+    "bot.py is NOT modified"
+  ],
+  "verification": [
+    "Run: pip install -r requirements.txt (in test_grader_bot dir) - should succeed with no errors",
+    "Run: python3 -c \"from sheet_generator import generate_answer_sheet, SHEET_WIDTH, SHEET_HEIGHT, MARKER_SIZE, MARKER_MARGIN, GRID_START_Y, BUBBLE_RADIUS, BUBBLE_SPACING_X, BUBBLE_SPACING_Y, QUESTION_NUM_WIDTH, STUDENT_NUM_Y, STUDENT_NUM_BUBBLE_RADIUS, STUDENT_NUM_SPACING_X, STUDENT_NUM_SPACING_Y; img = generate_answer_sheet(10, 4); img.save('/tmp/test_aruco.png'); print('OK')\" - should produce a valid sheet",
+    "Run: python3 -c \"from omr_scanner import scan_answer_sheet; print('Import OK')\" - should import successfully",
+    "Run: python3 omr_scanner.py - the self-test should detect filled bubbles correctly and print passing results"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
