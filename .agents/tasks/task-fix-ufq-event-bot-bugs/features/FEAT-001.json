@@ -1,0 +1,29 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Fix all three major bugs: (1) same-club self-registration, (2) channel subscription middleware, (3) QR code scanning reliability",
+  "status": "completed",
+  "steps": [
+    "BUG 1 - Self-registration block: In UFQ_SYSTEM_v3/event_bot/bot/database/crud.py, function register_user_for_event(), after getting the event dict and before the 'Check if already registered' section, add a check: if user['club_id'] is not None and event['club_id'] is not None and user['club_id'] == event['club_id'], return (False, \"Siz o'z klubingiz tadbiriga ro'yxatdan o'ta olmaysiz!\"). This blocks the CP who created the event AND all members of the same club from registering.",
+    "BUG 2 - Channel subscription middleware: In UFQ_SYSTEM_v3/event_bot/bot/middlewares/check_sub.py: (a) In the for loop where get_chat_member is called, convert channel to int if it's a numeric string. Change 'await bot.get_chat_member(chat_id=channel, user_id=user_id)' to use int(channel) when the channel string is numeric (e.g., starts with '-' followed by digits, or is all digits). (b) Fix the 'check_sub' callback handling: when user passes subscription check (all channels subscribed), instead of just showing 'Tasdiqlandi! Endi /start bosing.' and returning, actually pass through to the handler. The current code at the bottom does 'return' after deleting the message - it should call 'return await handler(event, data)' so the user's action proceeds. But actually it can't because a CallbackQuery for 'check_sub' doesn't have a meaningful handler destination - so instead, after confirming subscription, send a message telling them they can continue and let them use the bot normally on next interaction. The existing behavior is acceptable (telling user to press /start), but we should NOT block the middleware return. Actually the real issue is: when a non-subscribed user clicks a callback like 'reg_event_5', the middleware blocks it by showing the subscription message. After they subscribe and click 'check_sub', the middleware at the BOTTOM checks all channels again and if subscribed, deletes the old message and tells them to press /start. This is fine UX. The REAL problem is the get_chat_member failing for numeric channel IDs passed as strings. Fix the channel ID parsing.",
+    "BUG 3 - QR code scanning: (a) In UFQ_SYSTEM_v3/event_bot/bot/middlewares/check_sub.py, the regex bypass for QR deep links uses r'^/start chk_' - this should work. But add a more robust bypass: also check if event.text matches r'^/start\\s+chk_' to handle any whitespace variations. (b) In UFQ_SYSTEM_v3/event_bot/bot/handlers/scanner.py, the QR parsing splits by '_' which gives parts=['chk', 'E12', 'U987654321', 'S7a8b9c1d2e3f4a5b']. The security_hash = parts[3][1:] removes the 'S' prefix correctly. BUT if the security hash itself contains underscores (SHA256 hex doesn't but just to be safe), join all remaining parts after index 2 and strip the S prefix. Actually SHA256 hex is [0-9a-f] only, so no underscores. The parsing is fine. (c) The REAL issue with QR scanning is likely that the middleware's get_chat_member call THROWS an exception for numeric channel IDs (because they're passed as strings not ints), which causes the whole middleware to add the channel to not_subscribed_channels, blocking even admins/CPs who are subscribed. Fix this in the middleware (same as BUG 2). (d) Additionally, ensure the regex bypass in middleware is bulletproof - move it BEFORE the CHANNELS empty check and make it match both Message and potential edge cases.",
+    "After all fixes, regenerate the zip file: cd /projects/sandbox/ufqbot && rm -f UFQ_SYSTEM_v3_fixed.zip && zip -r UFQ_SYSTEM_v3_fixed.zip UFQ_SYSTEM_v3/ -x 'UFQ_SYSTEM_v3/.gitignore'",
+    "Commit all changes to the repository with a descriptive commit message in Uzbek/English."
+  ],
+  "acceptance_criteria": [
+    "In register_user_for_event(), users whose club_id matches the event's club_id are blocked from registering with an appropriate Uzbek error message",
+    "In check_sub.py, numeric channel IDs (like -1003754712535) are properly converted to int before calling bot.get_chat_member()",
+    "In check_sub.py, the QR deep link bypass regex reliably matches '/start chk_...' messages including whitespace variations",
+    "All modified Python files pass py_compile without errors",
+    "The UFQ_SYSTEM_v3_fixed.zip is regenerated at the repo root",
+    "All changes are committed to the local git repo"
+  ],
+  "verification": [
+    "Run: cd /projects/sandbox/ufqbot/UFQ_SYSTEM_v3/event_bot && python -m py_compile bot/database/crud.py && python -m py_compile bot/middlewares/check_sub.py && python -m py_compile bot/handlers/scanner.py",
+    "Run: cd /projects/sandbox/ufqbot/UFQ_SYSTEM_v3/event_bot && python -c \"import ast; [ast.parse(open(f).read()) for f in ['bot/database/crud.py', 'bot/middlewares/check_sub.py', 'bot/handlers/scanner.py']]\"",
+    "Run: ls -la /projects/sandbox/ufqbot/UFQ_SYSTEM_v3_fixed.zip to confirm zip exists",
+    "Run: cd /projects/sandbox/ufqbot && git log --oneline -3 to confirm commit exists"
+  ],
+  "blocked_reason": null,
+  "findings": "All 3 bugs fixed successfully. Python 3.11.15 set via pyenv global. py_compile and AST parse both pass. Zip regenerated. The source files were initially untracked (not in git index) so they appear as 'new file' in the commit. Post-review fixes applied: (1) moved 'import re' to module level, (2) added else branch in exception handler to fail-closed on unknown API errors."
+}
