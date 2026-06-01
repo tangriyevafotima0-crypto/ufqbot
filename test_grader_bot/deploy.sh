@@ -67,6 +67,7 @@ cat > "$INSTALL_DIR/.env" << EOF
 BOT_TOKEN=$BOT_TOKEN
 ADMIN_ID=$ADMIN_ID
 EOF
+chmod 600 "$INSTALL_DIR/.env"
 
 # ============================================================
 # [5] Python muhiti

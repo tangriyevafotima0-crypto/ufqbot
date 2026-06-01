@@ -221,9 +221,13 @@ def scan_answer_sheet(
     # Detect corner markers
     corners = _detect_corner_markers(gray)
     if corners is None:
-        # Try without perspective correction (assume image is already flat)
-        # Resize to expected dimensions
-        warped_gray = cv2.resize(gray, (SHEET_WIDTH, SHEET_HEIGHT))
+        result["error"] = (
+            "Burchak belgilari topilmadi. Iltimos qaytadan suratga oling:\n"
+            "- Varaqani tekis joyga qo'ying\n"
+            "- 4 ta burchak belgilari ko'rinsin\n"
+            "- Yaxshi yorug'likda suratga oling"
+        )
+        return result
     else:
         # Apply perspective transform
         warped = _perspective_transform(image, corners)

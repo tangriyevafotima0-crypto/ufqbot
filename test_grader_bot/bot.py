@@ -9,7 +9,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from telegram import Update, InputFile
+from telegram import Update
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -19,7 +19,7 @@ from telegram.ext import (
     filters,
 )
 
-from config import BOT_TOKEN, DATA_DIR
+from config import BOT_TOKEN, ADMIN_ID, DATA_DIR
 from sheet_generator import generate_answer_sheet
 from omr_scanner import scan_answer_sheet
 from excel_export import generate_results_excel
@@ -63,6 +63,18 @@ def _save_session(user_id: int, data: dict) -> None:
 
 
 # ============================================================
+# Access control
+# ============================================================
+
+async def _check_admin(update: Update) -> bool:
+    """Check if the user is the admin. If not, send a rejection message."""
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("Sizda ruxsat yo'q.")
+        return False
+    return True
+
+
+# ============================================================
 # Command handlers
 # ============================================================
 
@@ -82,9 +94,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 async def new_test_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle /new_test - start creating a new test."""
+    if not await _check_admin(update):
+        return ConversationHandler.END
+
     await update.message.reply_text(
         "Yangi test yaratamiz.\n\n"
-        "Savollar sonini kiriting (1 dan 100 gacha):"
+        "Savollar sonini kiriting (1 dan 74 gacha):"
     )
     return AWAITING_NUM_QUESTIONS
 
@@ -94,11 +109,11 @@ async def receive_num_questions(update: Update, context: ContextTypes.DEFAULT_TY
     text = update.message.text.strip()
     try:
         num = int(text)
-        if num < 1 or num > 100:
+        if num < 1 or num > 74:
             raise ValueError
     except ValueError:
         await update.message.reply_text(
-            "Iltimos, 1 dan 100 gacha son kiriting:"
+            "Iltimos, 1 dan 74 gacha son kiriting:"
         )
         return AWAITING_NUM_QUESTIONS
 
@@ -176,7 +191,7 @@ async def receive_answers(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     session["num_options"] = num_opt
     session["correct_answers"] = correct_indices
     session["correct_letters"] = answers_str
-    session["students"] = session.get("students", [])
+    session["students"] = []
     _save_session(user_id, session)
 
     # Generate answer sheet
@@ -208,6 +223,9 @@ async def receive_answers(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle /scan - start scanning mode."""
+    if not await _check_admin(update):
+        return ConversationHandler.END
+
     user_id = update.effective_user.id
     session = _load_session(user_id)
 
@@ -325,6 +343,9 @@ async def receive_student_name(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def results_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle /results - generate and send Excel file."""
+    if not await _check_admin(update):
+        return ConversationHandler.END
+
     user_id = update.effective_user.id
     session = _load_session(user_id)
 
@@ -392,7 +413,10 @@ def main() -> None:
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_student_name)
             ],
         },
-        fallbacks=[CommandHandler("cancel", cancel_command)],
+        fallbacks=[
+            CommandHandler("results", results_command),
+            CommandHandler("cancel", cancel_command),
+        ],
     )
 
     # Add handlers
