@@ -1,8 +1,13 @@
 """
-Answer sheet generator - creates printable A4 answer sheets with alignment markers
-and bubble grids for OMR scanning.
+Answer sheet generator - creates printable A4 answer sheets with ArUco alignment
+markers, QR code metadata, and bubble grids for OMR scanning.
 """
 
+import uuid
+
+import cv2
+import numpy as np
+import qrcode
 from PIL import Image, ImageDraw, ImageFont
 
 
@@ -10,8 +15,8 @@ from PIL import Image, ImageDraw, ImageFont
 SHEET_WIDTH = 2480
 SHEET_HEIGHT = 3508
 
-# Corner marker settings
-MARKER_SIZE = 50
+# Corner marker settings (ArUco markers)
+MARKER_SIZE = 80
 MARKER_MARGIN = 60
 
 # Layout settings
@@ -31,17 +36,56 @@ STUDENT_NUM_SPACING_X = 70
 STUDENT_NUM_SPACING_Y = 55
 
 
-def _draw_corner_markers(draw: ImageDraw.Draw) -> None:
-    """Draw 4 filled black squares at corners for alignment detection."""
+def _draw_aruco_markers(img: Image.Image) -> None:
+    """Draw 4 ArUco markers (DICT_4X4_50) at corners for alignment detection.
+
+    IDs: 0=top-left, 1=top-right, 2=bottom-right, 3=bottom-left.
+    Each marker is MARKER_SIZE x MARKER_SIZE pixels.
+    """
+    aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+
+    # Positions: top-left corner of each marker
     positions = [
-        (MARKER_MARGIN, MARKER_MARGIN),  # top-left
-        (SHEET_WIDTH - MARKER_MARGIN - MARKER_SIZE, MARKER_MARGIN),  # top-right
-        (MARKER_MARGIN, SHEET_HEIGHT - MARKER_MARGIN - MARKER_SIZE),  # bottom-left
+        (MARKER_MARGIN, MARKER_MARGIN, 0),                                          # top-left
+        (SHEET_WIDTH - MARKER_MARGIN - MARKER_SIZE, MARKER_MARGIN, 1),              # top-right
         (SHEET_WIDTH - MARKER_MARGIN - MARKER_SIZE,
-         SHEET_HEIGHT - MARKER_MARGIN - MARKER_SIZE),  # bottom-right
+         SHEET_HEIGHT - MARKER_MARGIN - MARKER_SIZE, 2),                            # bottom-right
+        (MARKER_MARGIN, SHEET_HEIGHT - MARKER_MARGIN - MARKER_SIZE, 3),             # bottom-left
     ]
-    for x, y in positions:
-        draw.rectangle([x, y, x + MARKER_SIZE, y + MARKER_SIZE], fill="black")
+
+    for x, y, marker_id in positions:
+        marker_img = cv2.aruco.generateImageMarker(aruco_dict, marker_id, MARKER_SIZE)
+        # Convert grayscale marker to RGB PIL Image
+        marker_pil = Image.fromarray(marker_img).convert("RGB")
+        img.paste(marker_pil, (x, y))
+
+
+def _draw_qr_code(img: Image.Image, num_questions: int, num_options: int) -> None:
+    """Draw a QR code encoding test metadata onto the sheet.
+
+    Placed at top-right area, below the top-right ArUco marker.
+    """
+    metadata = {
+        "test_id": str(uuid.uuid4()),
+        "num_questions": num_questions,
+        "num_options": num_options,
+    }
+
+    import json
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=4,
+        border=2,
+    )
+    qr.add_data(json.dumps(metadata))
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+
+    # Place QR code in top-right area, below the ArUco marker
+    qr_x = SHEET_WIDTH - MARKER_MARGIN - qr_img.width - 20
+    qr_y = MARKER_MARGIN + MARKER_SIZE + 20
+    img.paste(qr_img, (qr_x, qr_y))
 
 
 def _get_font(size: int) -> ImageFont.FreeTypeFont:
@@ -143,8 +187,11 @@ def generate_answer_sheet(
     img = Image.new("RGB", (SHEET_WIDTH, SHEET_HEIGHT), "white")
     draw = ImageDraw.Draw(img)
 
-    # Draw corner markers
-    _draw_corner_markers(draw)
+    # Draw ArUco corner markers
+    _draw_aruco_markers(img)
+
+    # Draw QR code with metadata
+    _draw_qr_code(img, num_questions, num_options)
 
     # Title
     title_font = _get_font(72)

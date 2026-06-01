@@ -1,0 +1,22 @@
+{
+  "project_type": "Python Telegram bot for OMR (Optical Mark Recognition) test grading",
+  "language": "Python 3.11",
+  "build_system": "pip with requirements.txt, no Makefile or build scripts beyond deploy.sh",
+  "test_framework": "No formal test framework - manual testing via Telegram bot interaction",
+  "build_command": "pip install -r requirements.txt",
+  "test_command": "python3 -c \"from sheet_generator import generate_answer_sheet; from omr_scanner import scan_answer_sheet; img = generate_answer_sheet(10, 4); img.save('/tmp/test_sheet.png'); print('Import and generation OK')\"",
+  "verification_instructions": "1. Install requirements. 2. Verify imports work. 3. Generate a test sheet and confirm it has ArUco markers. 4. Run a synthetic scan test: generate a sheet, fill in some bubbles programmatically, save it, scan it with scan_answer_sheet() and verify correct results.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "pip install -r requirements.txt (in the test_grader_bot directory)",
+  "environment_constraints": "OPEN_INTERNET - can install packages. OpenCV 4.13.0 with cv2.aruco module available (ArucoDetector, DICT_4X4_50, generateImageMarker). qrcode library needs to be installed.",
+  "contribution_requirements": "bot.py must NOT be modified. Function signatures of generate_answer_sheet() and scan_answer_sheet() must remain the same. All UI text in Uzbek.",
+  "key_patterns": "- sheet_generator.py exports constants (SHEET_WIDTH, SHEET_HEIGHT, MARKER_SIZE, etc.) that omr_scanner.py imports for coordinate calculations. - scan_answer_sheet() returns dict with keys: answers, score, total, details, student_number, uncertain_questions, error. - generate_answer_sheet() returns PIL Image. - 3-method consensus voting (A=adaptive threshold relative, B=Otsu circular, C=morphological) for bubble detection. - Two-column layout when questions > 20. - Student number section with tens (0-4) and units (0-9) rows.",
+  "relevant_files": [
+    "test_grader_bot/sheet_generator.py",
+    "test_grader_bot/omr_scanner.py",
+    "test_grader_bot/requirements.txt",
+    "test_grader_bot/bot.py (DO NOT MODIFY - reference only)",
+    "test_grader_bot/config.py (DO NOT MODIFY - reference only)"
+  ],
+  "directory_structure": "test_grader_bot/ - main code directory with bot.py (telegram bot logic), omr_scanner.py (image scanning), sheet_generator.py (PDF/image generation), config.py (env config), excel_export.py (results export), requirements.txt"
+}

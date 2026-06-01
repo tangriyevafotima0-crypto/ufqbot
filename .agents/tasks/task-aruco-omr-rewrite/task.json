@@ -1,0 +1,14 @@
+{
+  "task_id": "task-aruco-omr-rewrite",
+  "task_description": "Rewrite the OMR scanning system to use ArUco markers for robust corner detection instead of plain black squares with contour-based detection. Add QR code metadata to sheets. The current system always returns 0% because perspective correction fails with real phone photos.",
+  "status": "completed",
+  "feature_order": ["FEAT-001"],
+  "blocked_reason": null,
+  "verification": {
+    "build": "pass",
+    "tests": "pass",
+    "test_quality": "pass",
+    "docker_build": "skipped",
+    "summary": "All verifications pass: pip install succeeds, imports work, self-test achieves 10/10 with student number 12 detected, robustness test with 3-degree rotation + 70% scale also achieves 10/10. bot.py not modified."
+  }
+}
