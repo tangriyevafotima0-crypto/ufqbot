@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "feat",
   "description": "Rewrite omr_scanner.py with relative bubble detection and forgiving OMR fallbacks. Replace absolute Otsu-per-ROI approach with relative comparison across all bubbles in a question, and add multi-stage corner detection fallbacks.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Rewrite test_grader_bot/omr_scanner.py completely with these changes:",
     "1. Replace _analyze_bubble() with a new approach: apply a SINGLE adaptive threshold (cv2.adaptiveThreshold) on the entire warped grayscale image ONCE after perspective correction. Store this as the pre-thresholded binary image.",
@@ -30,5 +30,5 @@
     "cd /projects/sandbox/ufqbot && python -c \"from test_grader_bot.omr_scanner import scan_answer_sheet; import inspect; sig = inspect.signature(scan_answer_sheet); assert 'image_path' in sig.parameters; assert 'num_questions' in sig.parameters; print('Signature OK')\""
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All verification passed. Dependencies already installed. Import works both with sys.path manipulation and from within test_grader_bot/ directory. The __pycache__ directory was pre-existing and not committed."
 }
