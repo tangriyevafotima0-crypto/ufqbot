@@ -49,6 +49,7 @@ sudo systemctl disable "$SERVICE_NAME" 2>/dev/null || true
 echo ">>> [2/6] Fayllar joylashtirilmoqda..."
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$INSTALL_DIR/data"
+mkdir -p "$INSTALL_DIR/data/tests"
 
 cp "$SCRIPT_DIR/config.py" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/bot.py" "$INSTALL_DIR/"

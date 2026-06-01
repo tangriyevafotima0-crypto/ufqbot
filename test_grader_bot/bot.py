@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 from telegram import Update
@@ -21,7 +22,7 @@ from telegram.ext import (
     filters,
 )
 
-from config import BOT_TOKEN, ADMIN_IDS, DATA_DIR, MAX_STUDENTS
+from config import BOT_TOKEN, ADMIN_IDS, DATA_DIR, MAX_STUDENTS, TESTS_DIR
 from sheet_generator import generate_answer_sheet
 from omr_scanner import scan_answer_sheet
 from excel_export import generate_results_excel
@@ -48,38 +49,63 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
-# Session storage helpers
+# Shared test storage helpers
 # ============================================================
 
 
-def _get_session_path(user_id: int) -> Path:
-    """Get path to session JSON file for a user."""
-    return DATA_DIR / f"session_{user_id}.json"
+def _generate_test_id() -> str:
+    """Generate unique test ID like test_001, test_002, etc."""
+    existing = list(TESTS_DIR.glob("test_*.json"))
+    if not existing:
+        return "test_001"
+    nums = []
+    for p in existing:
+        try:
+            num = int(p.stem.split("_")[1])
+            nums.append(num)
+        except (ValueError, IndexError):
+            pass
+    next_num = max(nums) + 1 if nums else 1
+    return f"test_{next_num:03d}"
 
 
-def _load_session(user_id: int) -> dict:
-    """Load session data from JSON file. Returns empty dict if corrupted."""
-    path = _get_session_path(user_id)
+def _get_test_path(test_id: str) -> Path:
+    """Get path to test JSON file."""
+    return TESTS_DIR / f"{test_id}.json"
+
+
+def _load_test(test_id: str) -> dict:
+    """Load test data from JSON file. Returns empty dict if not found."""
+    path = _get_test_path(test_id)
     if path.exists():
         try:
             with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if not isinstance(data, dict):
-                return {}
-            return data
+                return json.load(f)
         except (json.JSONDecodeError, ValueError, OSError):
-            logger.warning("Session file corrupted for user %s, resetting.", user_id)
             return {}
     return {}
 
 
-def _save_session(user_id: int, data: dict) -> None:
-    """Save session data to JSON file atomically (temp file + os.replace)."""
-    path = _get_session_path(user_id)
+def _save_test(test_id: str, data: dict) -> None:
+    """Save test data to JSON file atomically."""
+    path = _get_test_path(test_id)
     tmp_path = path.with_suffix(".tmp")
     with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     os.replace(tmp_path, path)
+
+
+def _list_tests() -> list:
+    """List all available tests, sorted by ID."""
+    tests = []
+    for p in sorted(TESTS_DIR.glob("test_*.json")):
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            tests.append(data)
+        except (json.JSONDecodeError, ValueError, OSError):
+            continue
+    return tests
 
 
 # ============================================================
@@ -141,6 +167,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         "Assalomu alaykum! Men test tekshiruvchi botman.\n\n"
         "Buyruqlar:\n"
         "/new_test - Yangi test yaratish\n"
+        "/tests - Mavjud testlar ro'yxati\n"
+        "/use_test - Testni tanlash (masalan: /use_test test_001)\n"
         "/roster - O'quvchilar ro'yxatini kiritish (auto-naming)\n"
         "/scan - Javob varaqalarini skanerlash\n"
         "/edit - To'g'ri javobni o'zgartirish (masalan: /edit 5 B)\n"
@@ -245,18 +273,21 @@ async def receive_answers(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return AWAITING_ANSWERS
         correct_indices.append(option_letters.index(ans))
 
-    # Save session
-    user_id = update.effective_user.id
-    session = _load_session(user_id)
-    session["num_questions"] = num_q
-    session["num_options"] = num_opt
-    session["correct_answers"] = correct_indices
-    session["correct_letters"] = answers_str
-    session["students"] = []
-    # Preserve roster if exists
-    if "roster" not in session:
-        session["roster"] = {}
-    _save_session(user_id, session)
+    # Save to shared test storage
+    test_id = _generate_test_id()
+    test_data = {
+        "id": test_id,
+        "created_by": update.effective_user.id,
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "num_questions": num_q,
+        "num_options": num_opt,
+        "correct_answers": correct_indices,
+        "correct_letters": answers_str,
+        "roster": {},
+        "students": [],
+    }
+    _save_test(test_id, test_data)
+    context.user_data["active_test_id"] = test_id
 
     # Generate answer sheet
     await update.message.reply_text("Javob varaqasi tayyorlanmoqda...")
@@ -273,7 +304,7 @@ async def receive_answers(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 document=f,
                 filename=f"javob_varaqasi_{num_q}_savol.png",
                 caption=(
-                    f"Javob varaqasi tayyor!\n"
+                    f"Javob varaqasi tayyor! (Test: {test_id})\n"
                     f"Savollar: {num_q}, Variantlar: {option_letters}\n\n"
                     f"Bu varaqani chop eting va o'quvchilarga tarqating.\n"
                     f"Tekshirish uchun /scan buyrug'ini yuboring."
@@ -320,14 +351,19 @@ async def receive_roster_text(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return AWAITING_ROSTER
 
-    user_id = update.effective_user.id
-    session = _load_session(user_id)
-    # Roster keys are stored as strings for JSON compatibility; lookups use str(student_number)
-    session["roster"] = {str(k): v for k, v in roster.items()}
-    _save_session(user_id, session)
+    test_id = context.user_data.get("active_test_id")
+    if not test_id:
+        await update.message.reply_text(
+            "Avval /new_test yoki /use_test bilan test tanlang."
+        )
+        return ConversationHandler.END
+
+    test_data = _load_test(test_id)
+    test_data["roster"] = {str(k): v for k, v in roster.items()}
+    _save_test(test_id, test_data)
 
     await update.message.reply_text(
-        f"Ro'yxat saqlandi! {len(roster)} ta o'quvchi."
+        f"Ro'yxat saqlandi! {len(roster)} ta o'quvchi. (Test: {test_id})"
     )
     return ConversationHandler.END
 
@@ -367,13 +403,19 @@ async def receive_roster_document(update: Update, context: ContextTypes.DEFAULT_
         )
         return AWAITING_ROSTER
 
-    user_id = update.effective_user.id
-    session = _load_session(user_id)
-    session["roster"] = {str(k): v for k, v in roster.items()}
-    _save_session(user_id, session)
+    test_id = context.user_data.get("active_test_id")
+    if not test_id:
+        await update.message.reply_text(
+            "Avval /new_test yoki /use_test bilan test tanlang."
+        )
+        return ConversationHandler.END
+
+    test_data = _load_test(test_id)
+    test_data["roster"] = {str(k): v for k, v in roster.items()}
+    _save_test(test_id, test_data)
 
     await update.message.reply_text(
-        f"Ro'yxat saqlandi! {len(roster)} ta o'quvchi."
+        f"Ro'yxat saqlandi! {len(roster)} ta o'quvchi. (Test: {test_id})"
     )
     return ConversationHandler.END
 
@@ -388,19 +430,24 @@ async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     if not await _check_admin(update):
         return ConversationHandler.END
 
-    user_id = update.effective_user.id
-    session = _load_session(user_id)
+    test_id = context.user_data.get("active_test_id")
+    if not test_id:
+        await update.message.reply_text(
+            "Avval /new_test yoki /use_test bilan test tanlang."
+        )
+        return ConversationHandler.END
 
-    if not session.get("correct_answers"):
+    test_data = _load_test(test_id)
+    if not test_data.get("correct_answers"):
         await update.message.reply_text(
             "Avval /new_test orqali test yarating.\n"
             "To'g'ri javoblar kiritilmagan."
         )
         return ConversationHandler.END
 
-    if len(session.get("students", [])) >= MAX_STUDENTS:
+    if len(test_data.get("students", [])) >= MAX_STUDENTS:
         await update.message.reply_text(
-            f"Sessiya limiti ({MAX_STUDENTS} ta o'quvchi) tugadi.\n"
+            f"Test limiti ({MAX_STUDENTS} ta o'quvchi) tugadi.\n"
             f"/results bilan natijalarni oling va /new_test bilan yangi test yarating."
         )
         return ConversationHandler.END
@@ -411,16 +458,19 @@ async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     context.user_data["auto_saved_count"] = 0
     context.user_data["batch_naming_index"] = 0
 
-    has_roster = bool(session.get("roster"))
+    has_roster = bool(test_data.get("roster"))
     roster_info = ""
     if has_roster:
         roster_info = (
-            f"\nRo'yxat mavjud ({len(session['roster'])} ta). "
+            f"\nRo'yxat mavjud ({len(test_data['roster'])} ta). "
             "Raqami mos kelsa avtomatik saqlanadi."
         )
 
+    num_q = test_data.get("num_questions", 0)
+    num_students = len(test_data.get("students", []))
     await update.message.reply_text(
-        "Skanerlash rejimi yoqildi (Ommaviy rejim).\n\n"
+        f"Skanerlash rejimi yoqildi (Ommaviy rejim).\n"
+        f"Test: {test_id} ({num_q} savol, {num_students} natija)\n\n"
         "Barcha javob varaqalarini ketma-ket rasm sifatida yuboring.\n"
         "Rasmni fayl (document) sifatida ham yuborishingiz mumkin."
         f"{roster_info}\n\n"
@@ -443,25 +493,25 @@ async def names_first_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def _process_scan_image(tmp_path: str, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Process a scanned image (shared logic for photos and documents in batch mode)."""
-    user_id = update.effective_user.id
-    session = _load_session(user_id)
+    test_id = context.user_data.get("active_test_id")
+    test_data = _load_test(test_id)
 
-    current_count = len(session.get("students", []))
+    current_count = len(test_data.get("students", []))
     auto_count = context.user_data.get("auto_saved_count", 0)
     unid_count = len(context.user_data.get("unidentified_results", []))
     if current_count + auto_count + unid_count >= MAX_STUDENTS:
         os.unlink(tmp_path)
         await update.message.reply_text(
-            f"Sessiya limiti ({MAX_STUDENTS} ta) tugadi. /done bilan davom eting."
+            f"Test limiti ({MAX_STUDENTS} ta) tugadi. /done bilan davom eting."
         )
         return BATCH_SCANNING
 
     try:
         result = scan_answer_sheet(
             tmp_path,
-            session["num_questions"],
-            session["num_options"],
-            session["correct_answers"],
+            test_data["num_questions"],
+            test_data["num_options"],
+            test_data["correct_answers"],
         )
     finally:
         os.unlink(tmp_path)
@@ -473,7 +523,7 @@ async def _process_scan_image(tmp_path: str, update: Update, context: ContextTyp
         )
         return BATCH_SCANNING
 
-    roster = session.get("roster", {})
+    roster = test_data.get("roster", {})
     student_number = result.get("student_number")
     score = result["score"]
     total = result["total"]
@@ -501,10 +551,12 @@ async def _process_scan_image(tmp_path: str, update: Update, context: ContextTyp
             "student_number": student_number,
             "uncertain_questions": uncertain,
         }
-        if "students" not in session:
-            session["students"] = []
-        session["students"].append(student_record)
-        _save_session(user_id, session)
+        # Reload test data to avoid race conditions
+        test_data = _load_test(test_id)
+        if "students" not in test_data:
+            test_data["students"] = []
+        test_data["students"].append(student_record)
+        _save_test(test_id, test_data)
         context.user_data["auto_saved_count"] = context.user_data.get("auto_saved_count", 0) + 1
 
         await update.message.reply_text(
@@ -632,9 +684,9 @@ async def _ask_batch_name(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     if idx >= len(unidentified):
         # All named
-        user_id = update.effective_user.id
-        session = _load_session(user_id)
-        total_students = len(session.get("students", []))
+        test_id = context.user_data.get("active_test_id")
+        test_data = _load_test(test_id)
+        total_students = len(test_data.get("students", []))
         await update.message.reply_text(
             f"Barcha natijalar saqlandi!\n"
             f"Jami tekshirilgan: {total_students} ta\n\n"
@@ -677,8 +729,8 @@ async def receive_batch_name(update: Update, context: ContextTypes.DEFAULT_TYPE)
     unidentified = context.user_data.get("unidentified_results", [])
     result = unidentified[idx]
 
-    user_id = update.effective_user.id
-    session = _load_session(user_id)
+    test_id = context.user_data.get("active_test_id")
+    test_data = _load_test(test_id)
 
     student_record = {
         "name": name,
@@ -690,15 +742,15 @@ async def receive_batch_name(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "student_number": result.get("student_number"),
         "uncertain_questions": result.get("uncertain_questions", []),
     }
-    if "students" not in session:
-        session["students"] = []
-    session["students"].append(student_record)
-    _save_session(user_id, session)
+    if "students" not in test_data:
+        test_data["students"] = []
+    test_data["students"].append(student_record)
+    _save_test(test_id, test_data)
 
     # Check if there are uncertain questions to resolve
     uncertain = result.get("uncertain_questions", [])
     if uncertain:
-        context.user_data["uncertain_student_idx"] = len(session["students"]) - 1
+        context.user_data["uncertain_student_idx"] = len(test_data["students"]) - 1
         context.user_data["uncertain_questions"] = uncertain
         await update.message.reply_text(
             f"Saqlandi: {text} - {result['score']}/{result['total']}\n"
@@ -721,18 +773,18 @@ async def receive_uncertain_answers(update: Update, context: ContextTypes.DEFAUL
     """Receive manual answers for uncertain questions."""
     text = update.message.text.strip().upper()
 
-    user_id = update.effective_user.id
-    session = _load_session(user_id)
+    test_id = context.user_data.get("active_test_id")
+    test_data = _load_test(test_id)
     student_idx = context.user_data.get("uncertain_student_idx")
-    num_options = session.get("num_options", 4)
+    num_options = test_data.get("num_options", 4)
     option_letters = "ABCDE"[:num_options]
-    correct_letters = session.get("correct_letters", [])
+    correct_letters = test_data.get("correct_letters", [])
 
-    if student_idx is None or student_idx >= len(session.get("students", [])):
+    if student_idx is None or student_idx >= len(test_data.get("students", [])):
         await update.message.reply_text("Xatolik. /done bilan davom eting.")
         return await _continue_after_uncertain(update, context)
 
-    student = session["students"][student_idx]
+    student = test_data["students"][student_idx]
     answers = student.get("answers", [])
 
     # Parse input like "12A,25C"
@@ -764,8 +816,8 @@ async def receive_uncertain_answers(update: Update, context: ContextTypes.DEFAUL
     student["answers"] = answers
     student["score"] = score
     student["uncertain_questions"] = []
-    session["students"][student_idx] = student
-    _save_session(user_id, session)
+    test_data["students"][student_idx] = student
+    _save_test(test_id, test_data)
 
     total = student.get("total", 0)
     pct = round((score / total) * 100, 1) if total > 0 else 0
@@ -802,12 +854,12 @@ async def receive_scan_photo(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return AWAITING_SCAN_PHOTO
 
-    user_id = update.effective_user.id
-    session = _load_session(user_id)
+    test_id = context.user_data.get("active_test_id")
+    test_data = _load_test(test_id)
 
-    if len(session.get("students", [])) >= MAX_STUDENTS:
+    if len(test_data.get("students", [])) >= MAX_STUDENTS:
         await update.message.reply_text(
-            f"Sessiya limiti ({MAX_STUDENTS} ta o'quvchi) tugadi.\n"
+            f"Test limiti ({MAX_STUDENTS} ta o'quvchi) tugadi.\n"
             f"/results bilan natijalarni oling."
         )
         return ConversationHandler.END
@@ -823,9 +875,9 @@ async def receive_scan_photo(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         result = scan_answer_sheet(
             tmp_path,
-            session["num_questions"],
-            session["num_options"],
-            session["correct_answers"],
+            test_data["num_questions"],
+            test_data["num_options"],
+            test_data["correct_answers"],
         )
     finally:
         os.unlink(tmp_path)
@@ -874,7 +926,8 @@ async def receive_student_name(update: Update, context: ContextTypes.DEFAULT_TYP
     surname = parts[1] if len(parts) > 1 else ""
 
     user_id = update.effective_user.id
-    session = _load_session(user_id)
+    test_id = context.user_data.get("active_test_id")
+    test_data = _load_test(test_id)
     result = context.user_data.get("last_scan_result", {})
 
     # Save student result
@@ -888,10 +941,10 @@ async def receive_student_name(update: Update, context: ContextTypes.DEFAULT_TYP
         "student_number": result.get("student_number"),
         "uncertain_questions": result.get("uncertain_questions", []),
     }
-    if "students" not in session:
-        session["students"] = []
-    session["students"].append(student_record)
-    _save_session(user_id, session)
+    if "students" not in test_data:
+        test_data["students"] = []
+    test_data["students"].append(student_record)
+    _save_test(test_id, test_data)
 
     total = result.get("total", 0)
     score = result.get("score", 0)
@@ -901,7 +954,7 @@ async def receive_student_name(update: Update, context: ContextTypes.DEFAULT_TYP
         f"Saqlandi!\n"
         f"O'quvchi: {name} {surname}\n"
         f"Ball: {score}/{total} ({pct}%)\n\n"
-        f"Jami tekshirilgan: {len(session['students'])} ta\n\n"
+        f"Jami tekshirilgan: {len(test_data['students'])} ta\n\n"
         f"Yana rasm yuboring yoki /results bilan natijalarni oling."
     )
     return AWAITING_SCAN_PHOTO
@@ -919,10 +972,15 @@ async def edit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not await _check_admin(update):
         return
 
-    user_id = update.effective_user.id
-    session = _load_session(user_id)
+    test_id = context.user_data.get("active_test_id")
+    if not test_id:
+        await update.message.reply_text(
+            "Avval /new_test yoki /use_test bilan test tanlang."
+        )
+        return
 
-    if not session.get("correct_answers"):
+    test_data = _load_test(test_id)
+    if not test_data.get("correct_answers"):
         await update.message.reply_text(
             "Avval /new_test orqali test yarating."
         )
@@ -948,8 +1006,8 @@ async def edit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     new_answer = parts[2].upper()
-    num_questions = session.get("num_questions", 0)
-    num_options = session.get("num_options", 4)
+    num_questions = test_data.get("num_questions", 0)
+    num_options = test_data.get("num_options", 4)
     option_letters = "ABCDE"[:num_options]
 
     if q_num < 1 or q_num > num_questions:
@@ -967,12 +1025,12 @@ async def edit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # Update correct answers
     q_idx = q_num - 1
     new_answer_idx = option_letters.index(new_answer)
-    session["correct_answers"][q_idx] = new_answer_idx
-    session["correct_letters"][q_idx] = new_answer
+    test_data["correct_answers"][q_idx] = new_answer_idx
+    test_data["correct_letters"][q_idx] = new_answer
 
     # Recalculate all student scores
-    correct_letters = session["correct_letters"]
-    students = session.get("students", [])
+    correct_letters = test_data["correct_letters"]
+    students = test_data.get("students", [])
     for student in students:
         answers = student.get("answers", [])
         score = 0
@@ -981,8 +1039,8 @@ async def edit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 score += 1
         student["score"] = score
 
-    session["students"] = students
-    _save_session(user_id, session)
+    test_data["students"] = students
+    _save_test(test_id, test_data)
 
     await update.message.reply_text(
         f"{q_num}-savol javobi {new_answer} ga o'zgartirildi. "
@@ -1000,10 +1058,15 @@ async def results_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not await _check_admin(update):
         return ConversationHandler.END
 
-    user_id = update.effective_user.id
-    session = _load_session(user_id)
+    test_id = context.user_data.get("active_test_id")
+    if not test_id:
+        await update.message.reply_text(
+            "Avval /new_test yoki /use_test bilan test tanlang."
+        )
+        return ConversationHandler.END
 
-    students = session.get("students", [])
+    test_data = _load_test(test_id)
+    students = test_data.get("students", [])
     if not students:
         await update.message.reply_text(
             "Hali hech qanday natija yo'q.\n"
@@ -1017,8 +1080,8 @@ async def results_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     await update.message.reply_document(
         document=buf,
-        filename="test_natijalari.xlsx",
-        caption=f"Natijalar tayyor! Jami: {num_students} ta o'quvchi.",
+        filename=f"{test_id}_natijalari.xlsx",
+        caption=f"Natijalar tayyor! Test: {test_id}, Jami: {num_students} ta o'quvchi.",
     )
     return ConversationHandler.END
 
@@ -1028,10 +1091,15 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     if not await _check_admin(update):
         return ConversationHandler.END
 
-    user_id = update.effective_user.id
-    session = _load_session(user_id)
+    test_id = context.user_data.get("active_test_id")
+    if not test_id:
+        await update.message.reply_text(
+            "Avval /new_test yoki /use_test bilan test tanlang."
+        )
+        return ConversationHandler.END
 
-    students = session.get("students", [])
+    test_data = _load_test(test_id)
+    students = test_data.get("students", [])
     if not students:
         await update.message.reply_text(
             "Hali hech qanday natija yo'q.\n"
@@ -1051,8 +1119,8 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     min_pct = round((min_score / total) * 100, 1) if total > 0 else 0
 
     # Find hardest question (most wrong answers)
-    num_questions = session.get("num_questions", 0)
-    correct_answers = session.get("correct_letters", [])
+    num_questions = test_data.get("num_questions", 0)
+    correct_answers = test_data.get("correct_letters", [])
     wrong_counts = [0] * num_questions
 
     for student in students:
@@ -1069,7 +1137,7 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     hardest_pct = round((hardest_wrong / num_students) * 100, 1) if num_students > 0 else 0
 
     await update.message.reply_text(
-        f"Statistika:\n\n"
+        f"Statistika (Test: {test_id}):\n\n"
         f"O'quvchilar soni: {num_students}\n"
         f"O'rtacha ball: {avg_score:.1f}/{total} ({avg_pct}%)\n"
         f"Eng yuqori: {max_score}/{total} ({max_pct}%)\n"
@@ -1082,6 +1150,61 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle /cancel - cancel current operation."""
     await update.message.reply_text("Bekor qilindi.")
+    return ConversationHandler.END
+
+
+# ============================================================
+# Tests listing and selection commands
+# ============================================================
+
+
+async def tests_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle /tests - list all available tests."""
+    if not await _check_admin(update):
+        return ConversationHandler.END
+
+    tests = _list_tests()
+    if not tests:
+        await update.message.reply_text("Hali test yaratilmagan. /new_test bilan boshlang.")
+        return ConversationHandler.END
+
+    lines = ["Mavjud testlar:\n"]
+    for t in tests:
+        test_id = t.get("id", "?")
+        num_q = t.get("num_questions", 0)
+        num_students = len(t.get("students", []))
+        created = t.get("created_at", "?")[:10]
+        lines.append(f"  {test_id} - {num_q} savol, {num_students} natija ({created})")
+
+    lines.append(f"\nTanlash: /use_test test_001")
+    await update.message.reply_text("\n".join(lines))
+    return ConversationHandler.END
+
+
+async def use_test_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle /use_test test_001 - select a test for scanning."""
+    if not await _check_admin(update):
+        return ConversationHandler.END
+
+    parts = update.message.text.strip().split()
+    if len(parts) < 2:
+        await update.message.reply_text("Format: /use_test test_001")
+        return ConversationHandler.END
+
+    test_id = parts[1]
+    test_data = _load_test(test_id)
+    if not test_data:
+        await update.message.reply_text(f"Test '{test_id}' topilmadi. /tests bilan ro'yxatni ko'ring.")
+        return ConversationHandler.END
+
+    context.user_data["active_test_id"] = test_id
+    num_q = test_data.get("num_questions", 0)
+    num_students = len(test_data.get("students", []))
+    await update.message.reply_text(
+        f"Test tanlandi: {test_id}\n"
+        f"Savollar: {num_q}, Natijalar: {num_students}\n\n"
+        f"Endi /scan bilan skanerlashingiz mumkin."
+    )
     return ConversationHandler.END
 
 
@@ -1166,6 +1289,8 @@ def main() -> None:
     app.add_handler(new_test_conv)
     app.add_handler(roster_conv)
     app.add_handler(scan_conv)
+    app.add_handler(CommandHandler("tests", tests_command))
+    app.add_handler(CommandHandler("use_test", use_test_command))
     app.add_handler(CommandHandler("edit", edit_command))
     app.add_handler(CommandHandler("results", results_command))
     app.add_handler(CommandHandler("stats", stats_command))

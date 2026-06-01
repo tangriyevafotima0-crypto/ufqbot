@@ -39,5 +39,9 @@ else:
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True)
 
+# Directory for shared test storage
+TESTS_DIR = DATA_DIR / "tests"
+TESTS_DIR.mkdir(exist_ok=True)
+
 # Maximum number of students per session
 MAX_STUDENTS = 50
