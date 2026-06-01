@@ -1,5 +1,5 @@
 """
-OMR (Optical Mark Recognition) scanner - detects filled bubbles on answer sheets
+OMR (Optical Mark Recognition) scanner V5 - detects filled bubbles on answer sheets
 using OpenCV image processing and perspective correction.
 
 Uses a 3-method consensus voting approach:
@@ -8,6 +8,9 @@ Uses a 3-method consensus voting approach:
   Method C: Morphological opening (removes thin strokes, keeps thick fill)
 
 Two out of three methods must agree for a confident detection.
+
+V5 fix: corrected perspective transform destination coordinates to use marker
+inset positions instead of page corners, fixing the 0-score bug.
 """
 
 import cv2
@@ -290,12 +293,29 @@ def _detect_corner_markers(gray: np.ndarray) -> Optional[np.ndarray]:
 
 
 def _perspective_transform(image: np.ndarray, corners: np.ndarray) -> np.ndarray:
-    """Apply perspective transform to get a flat top-down view."""
+    """Apply perspective transform to get a flat top-down view.
+
+    IMPORTANT: The detected ``corners`` are the *centers* of the corner
+    markers, which sheet_generator draws inset from the page edge by
+    ``MARKER_MARGIN + MARKER_SIZE / 2`` pixels. We must map them back to those
+    exact inset coordinates (NOT to the page corners 0..W/0..H), so that the
+    warped image keeps the SAME coordinate system used by
+    ``_get_bubble_positions``. Mapping to the page corners would shift/scale
+    every bubble by ~50-70px, far more than ROI_SIZE, causing all bubbles to
+    be sampled on blank areas (resulting in a score of 0).
+    """
+    # Marker center coordinates in the original full-sheet coordinate system.
+    inset = MARKER_MARGIN + MARKER_SIZE / 2.0
+    left = inset
+    top = inset
+    right = SHEET_WIDTH - inset
+    bottom = SHEET_HEIGHT - inset
+
     dst = np.array([
-        [0, 0],
-        [SHEET_WIDTH - 1, 0],
-        [SHEET_WIDTH - 1, SHEET_HEIGHT - 1],
-        [0, SHEET_HEIGHT - 1]
+        [left, top],       # top-left marker center
+        [right, top],      # top-right marker center
+        [right, bottom],   # bottom-right marker center
+        [left, bottom],    # bottom-left marker center
     ], dtype="float32")
 
     matrix = cv2.getPerspectiveTransform(corners, dst)
