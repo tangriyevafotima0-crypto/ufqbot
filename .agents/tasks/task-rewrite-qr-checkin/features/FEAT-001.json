@@ -1,0 +1,40 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Complete rewrite of the QR check-in system: simplify QR format, rewrite scanner handler, add scan_checkin() to crud.py, add auto_close_events() background task to main.py, update middleware bypass regex, and regenerate zip",
+  "status": "in_progress",
+  "steps": [
+    "Step 1 - Simplify QR data format in ticket_generator.py: Change generate_qr_data() to produce the new format: https://t.me/{BOT_USERNAME}?start=checkin_{ticket_id}_{pin}. This requires ticket_id to be passed in. Update the function signature to accept ticket_id and pin instead of event_id/user_telegram_id/security_hash. The caller in crud.py create_ticket() must be updated accordingly (generate QR data AFTER ticket is committed and has an ID).",
+    "Step 2 - Update crud.py create_ticket(): After the ticket is committed and has a primary key ID, call generate_qr_data(ticket.id, pin) to get the new-format QR data, then update the ticket's qr_data field. Remove the security_hash from the QR data generation (keep it in the DB for legacy but it's no longer used in QR).",
+    "Step 3 - Add scan_checkin() function in crud.py: New async function scan_checkin(ticket_id: int, pin: str, scanner_tg_id: int) that: (1) finds ticket by ID, (2) verifies PIN matches, (3) checks scanner is admin (SUPER_ADMIN_ID) or president (is_cp=1), (4) checks event is ACTIVE, (5) checks current time is within event_date + 1 hour (or no event_date set), (6) marks registration status as ATTENDED and sets check_in_time, (7) marks ticket as used (is_used=True, used_at=now), (8) returns (True, message, extra_data) on success. Does NOT give points - that happens in auto_close.",
+    "Step 4 - Add auto_close_events() function in crud.py: New async function that: (1) finds all ACTIVE events where event_date + 1 hour < now, (2) for each event: gives attendance_points to all ATTENDED registrations (updating users.total_points and user_status), marks event as COMPLETED, (3) returns a list of report dicts containing event info, attendee lists, and point info for notifications.",
+    "Step 5 - Completely rewrite scanner.py: The handle_deep_link handler must parse the new format 'checkin_{ticket_id}_{pin}' (args starts with 'checkin_'). Extract ticket_id and pin, call scan_checkin(), send confirmation to scanner, send notification to ticket owner. Keep the /scan command and /mytickets command as-is (they work fine).",
+    "Step 6 - Add background task to main.py: After bot initialization, start an asyncio background task that runs auto_close_events() every 5 minutes. On each run, if events were closed, send the attendance report to the event creator (use created_by field to find their telegram_id) and SUPER_ADMIN_ID. The report message includes: event name, total registered count, total attended count, and list of attendees.",
+    "Step 7 - Update check_sub.py middleware: Change the bypass regex from r'^/start(@\\w+)?\\s+chk_' to r'^/start(@\\w+)?\\s+checkin_' to match the new QR deep link format.",
+    "Step 8 - Regenerate UFQ_SYSTEM_v3_fixed.zip: Run zip -r UFQ_SYSTEM_v3_fixed.zip UFQ_SYSTEM_v3/ -x '*__pycache__*' '*.pyc' from /projects/sandbox/ufqbot/",
+    "Step 9 - Commit all changes to git with descriptive message"
+  ],
+  "acceptance_criteria": [
+    "generate_qr_data() produces URLs in format https://t.me/{BOT_USERNAME}?start=checkin_{ticket_id}_{pin}",
+    "create_ticket() generates QR data with the ticket's actual primary key ID after commit",
+    "scan_checkin() exists in crud.py and accepts (ticket_id, pin, scanner_tg_id), returns (success, msg, extra)",
+    "scan_checkin() does NOT award points - only marks ATTENDED and ticket as used",
+    "auto_close_events() exists in crud.py and processes expired ACTIVE events (event_date + 1 hour < now)",
+    "auto_close_events() awards attendance_points to ATTENDED users and marks events COMPLETED",
+    "scanner.py handle_deep_link parses 'checkin_{ticket_id}_{pin}' format correctly",
+    "main.py has a background task calling auto_close_events() every 5 minutes",
+    "check_sub.py bypass regex matches '^/start(@\\w+)?\\s+checkin_'",
+    "All Python files parse without syntax errors",
+    "UFQ_SYSTEM_v3_fixed.zip is regenerated",
+    "Changes are committed to git"
+  ],
+  "verification": [
+    "pip install -r UFQ_SYSTEM_v3/event_bot/requirements.txt",
+    "cd /projects/sandbox/ufqbot/UFQ_SYSTEM_v3/event_bot && python -c \"import ast; files=['bot/handlers/scanner.py','bot/database/crud.py','bot/utils/ticket_generator.py','bot/main.py','bot/middlewares/check_sub.py']; [ast.parse(open(f).read()) for f in files]; print('All files parse OK')\"",
+    "cd /projects/sandbox/ufqbot/UFQ_SYSTEM_v3/event_bot && python -c \"import sys; sys.path.insert(0,'.'); from bot.utils.ticket_generator import generate_qr_data; result=generate_qr_data(42,'123456'); assert 'checkin_42_123456' in result; print('QR format OK:', result)\"",
+    "cd /projects/sandbox/ufqbot/UFQ_SYSTEM_v3/event_bot && python -c \"import sys; sys.path.insert(0,'.'); from bot.database.crud import scan_checkin, auto_close_events; print('Imports OK')\"",
+    "test -f /projects/sandbox/ufqbot/UFQ_SYSTEM_v3_fixed.zip && echo 'ZIP exists'"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

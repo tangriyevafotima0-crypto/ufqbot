@@ -357,15 +357,14 @@ async def create_ticket(user_tg_id: int, event_id: int):
             pin = generate_pin()
             timestamp = datetime.utcnow().isoformat()
             security_hash = generate_security_hash(user['id'], event_id, pin, timestamp)
-            qr_data = generate_qr_data(event_id, user['telegram_id'], security_hash)
 
-            # Create ticket
+            # Create ticket without qr_data initially (placeholder)
             ticket = Ticket(
                 user_id=user['id'],
                 event_id=event_id,
                 ticket_pin=pin,
                 security_hash=security_hash,
-                qr_data=qr_data
+                qr_data="placeholder"
             )
             session.add(ticket)
             try:
@@ -379,6 +378,11 @@ async def create_ticket(user_tg_id: int, event_id: int):
                 else:
                     logger.error("PIN collision: max retries exceeded")
                     return None, "Chipta yaratishda xatolik (PIN collision). Qayta urinib ko'ring."
+
+            # Now ticket has an ID - generate QR data with new format
+            qr_data = generate_qr_data(ticket.id, pin)
+            ticket.qr_data = qr_data
+            await session.commit()
             break
 
     # Get club name from shared table
@@ -586,3 +590,207 @@ async def update_user_status_if_needed(telegram_id: int):
                 (new_status, telegram_id)
             )
             await db.commit()
+
+
+async def scan_checkin(ticket_id: int, pin: str, scanner_tg_id: int):
+    """Simple QR scan check-in. Returns (success, message, extra_data)"""
+    # 1. Check scanner permissions (must be SUPER_ADMIN_ID or is_cp=1)
+    is_admin = await is_user_admin(scanner_tg_id)
+    is_president = await is_user_president(scanner_tg_id)
+    if not is_admin and not is_president:
+        return False, "Sizda skanerlash huquqi yo'q!", None
+
+    # 2. Find ticket by ID using SQLAlchemy
+    async with AsyncSessionLocal() as session:
+        ticket = await session.get(Ticket, ticket_id)
+        if not ticket:
+            return False, "Chipta topilmadi!", None
+
+        # 3. Verify PIN matches ticket.ticket_pin
+        if ticket.ticket_pin != pin:
+            return False, "Noto'g'ri PIN kod!", None
+
+        # 4. Check ticket not already used
+        if ticket.is_used:
+            used_time = ticket.used_at.strftime("%H:%M") if ticket.used_at else "noma'lum vaqt"
+            return False, f"Bu chipta allaqachon ishlatilgan!\nSkanerlangan vaqt: {used_time}", None
+
+        # 5. Get the event - check status is ACTIVE
+        event = await session.get(Event, ticket.event_id)
+        if not event:
+            return False, "Tadbir topilmadi!", None
+        if event.status != EventStatus.ACTIVE:
+            return False, "Bu tadbir faol emas!", None
+
+        # 6. Check time: if event.event_date is set, current time must be <= event_date + 1 hour
+        now = datetime.utcnow()
+        if event.event_date:
+            try:
+                if isinstance(event.event_date, str):
+                    event_dt = datetime.fromisoformat(event.event_date)
+                else:
+                    event_dt = event.event_date
+                deadline = event_dt + timedelta(hours=1)
+                if now > deadline:
+                    return False, "Check-in vaqti tugagan!", None
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Event date parsing error: {e}")
+
+        # 7. Find registration for this ticket's user_id and event_id
+        reg_result = await session.execute(
+            select(Registration).where(
+                Registration.user_id == ticket.user_id,
+                Registration.event_id == ticket.event_id
+            )
+        )
+        registration = reg_result.scalars().first()
+        if not registration:
+            return False, "Foydalanuvchi bu tadbirga ro'yxatdan o'tmagan!", None
+
+        # 8. Mark registration.status = ATTENDED, registration.check_in_time = now
+        registration.status = RegStatus.ATTENDED
+        registration.check_in_time = now
+
+        # 9. Mark ticket.is_used = True, ticket.used_at = now
+        ticket.is_used = True
+        ticket.used_at = now
+
+        # 10. Commit
+        await session.commit()
+
+    # 11. Get user info from shared table for response
+    async with get_db() as db:
+        cursor = await db.execute("SELECT * FROM users WHERE id=?", (ticket.user_id,))
+        user_row = await cursor.fetchone()
+        if not user_row:
+            return True, "Check-in muvaffaqiyatli!", None
+        user = dict(user_row)
+
+    # 12. Return (True, scanner_message, extra_data_dict)
+    check_in_time = now.strftime("%H:%M")
+    scanner_message = (
+        f"Ishtirokchi: {user['full_name']}\n"
+        f"Tadbir: {event.title}\n"
+        f"Check-in vaqti: {check_in_time}"
+    )
+    extra_data = {
+        'user_tg_id': user['telegram_id'],
+        'user_name': user['full_name'],
+        'event_title': event.title
+    }
+
+    return True, scanner_message, extra_data
+
+
+async def auto_close_events():
+    """Close expired events and distribute points. Returns list of report dicts."""
+    reports = []
+    now = datetime.utcnow()
+
+    # 1. Find ACTIVE events where event_date IS NOT NULL AND event_date + 1 hour < now
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Event).where(
+                Event.status == EventStatus.ACTIVE,
+                Event.event_date.isnot(None)
+            )
+        )
+        active_events = result.scalars().all()
+
+    expired_events = []
+    for event in active_events:
+        try:
+            if isinstance(event.event_date, str):
+                event_dt = datetime.fromisoformat(event.event_date)
+            else:
+                event_dt = event.event_date
+            if event_dt + timedelta(hours=1) < now:
+                expired_events.append(event)
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Event date parsing error for event {event.id}: {e}")
+
+    # 2. For each expired event:
+    for event in expired_events:
+        try:
+            attendees_info = []
+
+            # a. Find all registrations with status ATTENDED
+            async with AsyncSessionLocal() as session:
+                reg_result = await session.execute(
+                    select(Registration).where(
+                        Registration.event_id == event.id,
+                        Registration.status == RegStatus.ATTENDED
+                    )
+                )
+                attended_regs = reg_result.scalars().all()
+
+                # Get total registered count
+                all_reg_result = await session.execute(
+                    select(Registration).where(Registration.event_id == event.id)
+                )
+                all_regs = all_reg_result.scalars().all()
+                total_registered = len(all_regs)
+                total_attended = len(attended_regs)
+
+            # b. For each attended registration: add points
+            for reg in attended_regs:
+                async with get_db() as db:
+                    cursor = await db.execute("SELECT * FROM users WHERE id=?", (reg.user_id,))
+                    user_row = await cursor.fetchone()
+                    if not user_row:
+                        continue
+                    user = dict(user_row)
+
+                    # Add attendance_points to user's total_points
+                    new_points = user['total_points'] + event.attendance_points
+                    await db.execute(
+                        "UPDATE users SET total_points=? WHERE id=?",
+                        (new_points, reg.user_id)
+                    )
+
+                    # Recalculate and update user_status
+                    new_status = calculate_user_status(new_points)
+                    if new_status != user.get('user_status', 'BRONZE'):
+                        await db.execute(
+                            "UPDATE users SET user_status=? WHERE id=?",
+                            (new_status, reg.user_id)
+                        )
+                    await db.commit()
+
+                    attendees_info.append({
+                        'name': user['full_name'],
+                        'points_given': event.attendance_points
+                    })
+
+            # c. Mark event.status = EventStatus.COMPLETED
+            async with AsyncSessionLocal() as session:
+                ev = await session.get(Event, event.id)
+                if ev:
+                    ev.status = EventStatus.COMPLETED
+                    await session.commit()
+
+            # e. Get event creator's telegram_id from shared users table
+            creator_tg_id = None
+            async with get_db() as db:
+                cursor = await db.execute(
+                    "SELECT telegram_id FROM users WHERE id=?", (event.created_by,)
+                )
+                creator_row = await cursor.fetchone()
+                if creator_row:
+                    creator_tg_id = creator_row['telegram_id']
+
+            # f. Build report dict
+            report = {
+                'event_title': event.title,
+                'event_id': event.id,
+                'creator_tg_id': creator_tg_id,
+                'total_registered': total_registered,
+                'total_attended': total_attended,
+                'attendees': attendees_info
+            }
+            reports.append(report)
+
+        except Exception as e:
+            logger.error(f"Auto-close error for event {event.id}: {e}")
+
+    return reports
