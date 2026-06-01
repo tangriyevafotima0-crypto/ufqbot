@@ -1,0 +1,23 @@
+{
+  "project_type": "Python Telegram Bot with OMR (Optical Mark Recognition) scanning",
+  "language": "Python 3.10+",
+  "build_system": "pip with requirements.txt, no Makefile/Dockerfile",
+  "test_framework": "No automated tests exist in this project",
+  "build_command": "pip install -r requirements.txt",
+  "test_command": "python -c \"from sheet_generator import generate_answer_sheet; from omr_scanner import scan_answer_sheet; from name_reader import read_name_from_image; print('All imports OK')\"",
+  "verification_instructions": "1. Install dependencies: pip install -r requirements.txt\n2. Import check: python -c 'from sheet_generator import generate_answer_sheet; from omr_scanner import scan_answer_sheet; from name_reader import read_name_from_image; print(\"OK\")'\n3. Generate a test sheet: python -c 'from sheet_generator import generate_answer_sheet; img = generate_answer_sheet(30, 4); img.save(\"/tmp/test_sheet_v6.png\"); print(\"Sheet generated\")'\n4. Verify sheet visually has proper spacing and bordered name fields\n5. Verify name_reader module loads and has the expected interface",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "1. cd /projects/sandbox/ufqbot/test_grader_bot\n2. pip install -r requirements.txt\n3. Verify imports work",
+  "environment_constraints": "OPEN_INTERNET network mode - full access. Python 3.11 available via pyenv. OpenCV (opencv-python-headless), Pillow, numpy already in requirements.txt.",
+  "contribution_requirements": "No CONTRIBUTING.md. Git workflow: checkout main, create branch feat/v6-design-and-ocr, commit with descriptive messages.",
+  "key_patterns": "- sheet_generator.py uses PIL/Pillow to draw answer sheets at 2480x3508 (A4 300DPI)\n- omr_scanner.py uses OpenCV for perspective transform and bubble detection\n- Scanner imports constants from sheet_generator to know bubble positions\n- 3-method consensus voting for bubble detection (adaptive threshold, Otsu, morphological)\n- Student number section: 2 rows (tens 0-4, units 0-9), starts at STUDENT_NUM_Y=450+50=500\n- Grid starts at y=695 (STUDENT_NUM_Y + 50 + 2*STUDENT_NUM_SPACING_Y + 30 + 60)\n- Corner markers at MARKER_MARGIN=60 from edges, size 50px\n- bot.py uses python-telegram-bot ConversationHandler pattern",
+  "relevant_files": [
+    "test_grader_bot/sheet_generator.py",
+    "test_grader_bot/omr_scanner.py",
+    "test_grader_bot/bot.py",
+    "test_grader_bot/config.py",
+    "test_grader_bot/excel_export.py",
+    "test_grader_bot/requirements.txt"
+  ],
+  "directory_structure": "test_grader_bot/ - main bot directory\n  bot.py - Telegram bot handlers (ConversationHandler pattern)\n  config.py - loads BOT_TOKEN, ADMIN_IDS from .env\n  sheet_generator.py - generates A4 answer sheet images with PIL\n  omr_scanner.py - OpenCV-based OMR scanner with perspective correction\n  excel_export.py - openpyxl-based results export\n  requirements.txt - dependencies\n  deploy.sh - systemd deployment script\n  data/ - runtime data storage (JSON files)"
+}

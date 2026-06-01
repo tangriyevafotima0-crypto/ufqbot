@@ -1,0 +1,26 @@
+{
+  "id": "FEAT-003",
+  "type": "feat",
+  "description": "Create name_reader.py module for handwritten block capital letter OCR from the name/surname fields on the answer sheet. Integrate it into omr_scanner.py and bot.py.",
+  "status": "pending",
+  "steps": [
+    "Create test_grader_bot/name_reader.py with the following approach:\n  - Function read_name_from_image(warped_gray: np.ndarray, region: str = 'name') -> Optional[str]\n  - The function receives the perspective-corrected grayscale image (same as omr_scanner uses after _perspective_transform)\n  - Extract the name region ROI: based on the sheet layout, the name box is at approximately y=290-370, x=200-1000 (adjust based on the actual box positions from FEAT-002). The surname box is at approximately y=370-440, x=200-1000\n  - Apply preprocessing: Gaussian blur, adaptive thresholding (binary inverse)\n  - Find contours of individual characters, filter by size (height 20-60px for block capitals at 300DPI)\n  - Sort contours left-to-right by x-coordinate\n  - For each detected character contour:\n    a. Extract the bounding box ROI\n    b. Resize to a standard size (e.g., 28x28 or 32x32)\n    c. Use template matching or feature-based recognition:\n       - Calculate aspect ratio, number of holes (using hierarchy), vertical/horizontal projections\n       - Use simple heuristics to classify common block capital letters (A-Z, O', G', SH, CH for Uzbek)\n       - Alternatively, use a simpler approach: just segment and count characters, returning segmented character images for potential future ML\n  - For V6, implement a BEST-EFFORT basic recognizer that works on very neat block capitals\n  - Return the detected string or None if fewer than 2 characters detected\n  - Include a helper function get_name_region_coords() that returns the (x1, y1, x2, y2) coordinates for the name and surname writing areas based on sheet_generator constants",
+    "In test_grader_bot/omr_scanner.py:\n  - Add import: from name_reader import read_name_from_image\n  - In scan_answer_sheet(), after the perspective transform and binary image creation (after the line 'binary_adaptive = cv2.adaptiveThreshold(...)'), call read_name_from_image(warped_gray) to try to detect the written name\n  - Add 'detected_name' key to the result dict (set to the return value of read_name_from_image, which may be None)\n  - Update the module docstring to mention V6 and name OCR feature",
+    "In test_grader_bot/bot.py:\n  - Update module docstring to mention V6 and OCR name detection\n  - In the _ask_batch_name function (batch naming mode), when showing the prompt for naming, if result.get('detected_name') is not None, include a suggestion like 'OCR taklifi: {detected_name}' in the message\n  - In receive_scan_photo (single scan mode), when showing the naming prompt, if result.get('detected_name') exists, mention it as a suggestion\n  - In _process_scan_image (batch mode), if the student was NOT auto-identified by roster but has a detected_name, include it in the status message"
+  ],
+  "acceptance_criteria": [
+    "name_reader.py exists and can be imported without errors",
+    "read_name_from_image function accepts a numpy ndarray and returns Optional[str]",
+    "omr_scanner.py's scan_answer_sheet returns a dict with 'detected_name' key",
+    "bot.py shows OCR name suggestions when available during naming steps",
+    "The name reader is best-effort - it returns None gracefully when it cannot read text",
+    "No existing scanner functionality is broken (the detected_name is purely additive)"
+  ],
+  "verification": [
+    "Run: cd /projects/sandbox/ufqbot/test_grader_bot && python -c 'from name_reader import read_name_from_image; import numpy as np; img = np.zeros((3508, 2480), dtype=np.uint8); result = read_name_from_image(img); print(f\"Result: {result}\"); assert result is None or isinstance(result, str); print(\"name_reader OK\")'",
+    "Run: cd /projects/sandbox/ufqbot/test_grader_bot && python -c 'from omr_scanner import scan_answer_sheet; print(\"omr_scanner imports OK\")'",
+    "Run: cd /projects/sandbox/ufqbot/test_grader_bot && python -c 'import bot; print(\"bot imports OK\")'"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

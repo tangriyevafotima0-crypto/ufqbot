@@ -1,0 +1,24 @@
+{
+  "id": "FEAT-001",
+  "type": "chore",
+  "description": "Set up the git branch and install dependencies to verify baseline works",
+  "status": "in_progress",
+  "steps": [
+    "In /projects/sandbox/ufqbot, checkout main branch, then create and checkout new branch 'feat/v6-design-and-ocr'",
+    "Install Python dependencies: cd test_grader_bot && pip install -r requirements.txt",
+    "Run import verification: python -c 'from sheet_generator import generate_answer_sheet; from omr_scanner import scan_answer_sheet; print(\"Baseline OK\")'",
+    "Generate a baseline test sheet to confirm it works: python -c 'from sheet_generator import generate_answer_sheet; img = generate_answer_sheet(30, 4); img.save(\"/tmp/baseline_v5.png\"); print(\"OK\")'"
+  ],
+  "acceptance_criteria": [
+    "On branch feat/v6-design-and-ocr based off main",
+    "All dependencies installed successfully",
+    "Import verification passes without errors",
+    "Baseline sheet generation produces a valid PNG file"
+  ],
+  "verification": [
+    "Run: cd /projects/sandbox/ufqbot && git branch --show-current (should show feat/v6-design-and-ocr)",
+    "Run: cd /projects/sandbox/ufqbot/test_grader_bot && python -c 'from sheet_generator import generate_answer_sheet; from omr_scanner import scan_answer_sheet; print(\"OK\")'"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
