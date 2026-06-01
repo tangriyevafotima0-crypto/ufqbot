@@ -4,7 +4,8 @@ using ArUco marker detection for alignment and 3-method consensus voting for
 bubble fill detection.
 
 Uses cv2.aruco.ArucoDetector with DICT_4X4_50 for robust corner detection.
-Falls back to QR code detection if fewer than 4 ArUco markers are found.
+If ArUco markers are not found, attempts to decode the QR code on the sheet
+to provide a more helpful diagnostic error message.
 
 Bubble detection uses a 3-method consensus voting approach:
   Method A: Relative comparison with baseline subtraction (handles printed letters)
@@ -40,16 +41,6 @@ _MARKER_CENTERS = {
     2: (SHEET_WIDTH - MARKER_MARGIN - MARKER_SIZE / 2, SHEET_HEIGHT - MARKER_MARGIN - MARKER_SIZE / 2),
     3: (MARKER_MARGIN + MARKER_SIZE / 2, SHEET_HEIGHT - MARKER_MARGIN - MARKER_SIZE / 2),
 }
-
-
-def _preprocess_image(gray: np.ndarray) -> np.ndarray:
-    """Preprocess image for better bubble detection."""
-    blurred = cv2.GaussianBlur(gray, (9, 9), 10.0)
-    sharpened = cv2.addWeighted(gray, 1.5, blurred, -0.5, 0)
-    denoised = cv2.fastNlMeansDenoising(sharpened, None, h=10, templateWindowSize=7, searchWindowSize=21)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    enhanced = clahe.apply(denoised)
-    return enhanced
 
 
 def _detect_aruco_markers(gray: np.ndarray) -> dict:
@@ -110,13 +101,17 @@ def _estimate_fourth_corner(detected: dict) -> Optional[dict]:
     return result
 
 
-def _try_qr_fallback(gray: np.ndarray) -> Optional[np.ndarray]:
-    """Try to detect QR code and use its corners for alignment."""
+def _try_qr_decode(gray: np.ndarray) -> Optional[str]:
+    """
+    Try to decode the QR code on the sheet to extract metadata.
+    Returns the decoded string data if successful, None otherwise.
+    Used as a diagnostic tool when ArUco markers cannot be found.
+    """
     try:
         qr_detector = cv2.QRCodeDetector()
         data, points, _ = qr_detector.detectAndDecode(gray)
-        if points is not None and len(points[0]) >= 4:
-            return points[0][:4].astype(np.float32)
+        if data:
+            return data
     except Exception:
         pass
     return None
@@ -156,6 +151,10 @@ def _detect_markers_with_rotation(gray: np.ndarray) -> Optional[tuple]:
     """
     Attempt ArUco detection with auto-rotation fallback.
     Returns (src_points, dst_points, rotated_gray, rotation_angle) or None.
+
+    If ArUco detection fails in all orientations, attempts QR code decoding
+    to provide better diagnostics (the QR metadata is stored on the instance
+    attribute _last_qr_metadata for the caller to use in error messages).
     """
     detected = _detect_aruco_markers(gray)
     if len(detected) >= 3:
@@ -177,11 +176,18 @@ def _detect_markers_with_rotation(gray: np.ndarray) -> Optional[tuple]:
             if result is not None:
                 return result[0], result[1], rotated, angle
 
-    # QR code fallback
-    qr_pts = _try_qr_fallback(gray)
-    if qr_pts is not None:
-        pass
+    # All ArUco detection attempts failed.
+    # Try QR code decoding for diagnostics - store result for caller.
+    qr_data = _try_qr_decode(gray)
+    if qr_data is None:
+        # Also try rotated versions for QR
+        for _, rotate_code in rotations:
+            rotated = cv2.rotate(gray, rotate_code)
+            qr_data = _try_qr_decode(rotated)
+            if qr_data is not None:
+                break
 
+    _detect_markers_with_rotation._last_qr_data = qr_data
     return None
 
 
@@ -487,18 +493,32 @@ def scan_answer_sheet(
     detection = _detect_markers_with_rotation(gray)
 
     if detection is None:
-        result["error"] = (
-            "ArUco belgilari topilmadi. Barcha usullar sinab ko\'rildi:\n"
-            "1) ArUco markerlari aniqlash - muvaffaqiyatsiz\n"
-            "2) 3 markerdan 4-ni hisoblash - muvaffaqiyatsiz\n"
-            "3) QR kod orqali aniqlash - muvaffaqiyatsiz\n"
-            "4) 90/180/270 daraja aylantirish - muvaffaqiyatsiz\n\n"
-            "Iltimos qaytadan suratga oling:\n"
-            "- Varaqni tekis joyga qo\'ying\n"
-            "- 4 ta burchak belgilari aniq ko\'rinsin\n"
-            "- Yaxshi yorug\'likda, to\'g\'ri burchakda suratga oling\n"
-            "- Soya tushmasin"
-        )
+        # Check if QR code was readable even though markers weren't found
+        qr_data = getattr(_detect_markers_with_rotation, '_last_qr_data', None)
+        if qr_data:
+            result["error"] = (
+                "ArUco belgilari topilmadi, lekin QR kod o\'qildi.\n"
+                "Varaq aniqlandi (QR ma\'lumot: " + qr_data + "), "
+                "ammo burchak markerlari ko\'rinmayapti.\n\n"
+                "Iltimos qaytadan suratga oling:\n"
+                "- 4 ta burchak belgilari aniq ko\'rinsin\n"
+                "- Burchaklarni barmog\'ingiz bilan yopib qo\'ymang\n"
+                "- Varaqni tekis joyga qo\'ying\n"
+                "- Yaxshi yorug\'likda suratga oling"
+            )
+        else:
+            result["error"] = (
+                "ArUco belgilari topilmadi. Barcha usullar sinab ko\'rildi:\n"
+                "1) ArUco markerlari aniqlash - muvaffaqiyatsiz\n"
+                "2) 3 markerdan 4-ni hisoblash - muvaffaqiyatsiz\n"
+                "3) QR kod orqali aniqlash - muvaffaqiyatsiz\n"
+                "4) 90/180/270 daraja aylantirish - muvaffaqiyatsiz\n\n"
+                "Iltimos qaytadan suratga oling:\n"
+                "- Varaqni tekis joyga qo\'ying\n"
+                "- 4 ta burchak belgilari aniq ko\'rinsin\n"
+                "- Yaxshi yorug\'likda, to\'g\'ri burchakda suratga oling\n"
+                "- Soya tushmasin"
+            )
         return result
 
     src_pts, dst_pts, oriented_gray, rotation_angle = detection

@@ -32,5 +32,5 @@
     "Run: python3 omr_scanner.py - the self-test should detect filled bubbles correctly and print passing results"
   ],
   "blocked_reason": null,
-  "findings": "Self-test passes perfectly: 10/10 score detection and student number 12 correctly identified. ArUco detection works on first attempt without needing rotation fallback. The hex escape \\x27 was needed for apostrophes in Uzbek error messages when writing via Python scripts."
+  "findings": "Review v1 fixes applied: removed dead _preprocess_image function, repurposed _try_qr_fallback into _try_qr_decode that returns decoded QR metadata string (not corner points). When ArUco detection fails completely, the scanner now attempts to decode the QR code and provides a more targeted error message if QR is readable but markers are not found. Self-test still passes 10/10 with student number 12 detected."
 }
