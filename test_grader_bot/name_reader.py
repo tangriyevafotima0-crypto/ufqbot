@@ -10,11 +10,13 @@ import cv2
 import numpy as np
 from typing import Optional
 
+from sheet_generator import NAME_FIELD_BOX, SURNAME_FIELD_BOX
+
 
 # Name field coordinates on the warped (perspective-corrected) sheet
-# These correspond to the bordered boxes drawn by sheet_generator.py
-NAME_BOX = (205, 298, 1045, 357)    # (x1, y1, x2, y2) for ISM field (slight inset from border)
-SURNAME_BOX = (205, 385, 1045, 432)  # (x1, y1, x2, y2) for FAMILIYA field
+# Derived from sheet_generator box coordinates with a small inset from drawn borders
+NAME_BOX = (NAME_FIELD_BOX[0] + 5, NAME_FIELD_BOX[1] + 3, NAME_FIELD_BOX[2] - 5, NAME_FIELD_BOX[3] - 3)
+SURNAME_BOX = (SURNAME_FIELD_BOX[0] + 5, SURNAME_FIELD_BOX[1] + 3, SURNAME_FIELD_BOX[2] - 5, SURNAME_FIELD_BOX[3] - 3)
 
 
 def get_name_region_coords():
@@ -271,9 +273,15 @@ def read_name_from_image(warped_gray: np.ndarray, region: str = "name") -> Optio
 
     result = ''.join(recognized)
 
-    # If more than half are unrecognized, consider it failed
+    # If more than 40% are unrecognized, consider it failed
     unknown_count = result.count('?')
-    if unknown_count > len(result) * 0.5:
+    if unknown_count > len(result) * 0.4:
+        return None
+
+    # Filter out '?' characters for clean output
+    result = result.replace('?', '')
+
+    if not result:
         return None
 
     return result

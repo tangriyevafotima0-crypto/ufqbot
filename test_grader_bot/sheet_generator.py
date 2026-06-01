@@ -34,6 +34,10 @@ STUDENT_NUM_BUBBLE_RADIUS = 18
 STUDENT_NUM_SPACING_X = 70
 STUDENT_NUM_SPACING_Y = 55
 
+# Name field box coordinates (used by name_reader.py for OCR)
+NAME_FIELD_BOX = (200, 295, 1050, 360)
+SURNAME_FIELD_BOX = (200, 382, 1050, 435)
+
 
 def _draw_corner_markers(draw: ImageDraw.Draw) -> None:
     """Draw 4 filled black squares at corners for alignment detection."""
@@ -167,11 +171,11 @@ def generate_answer_sheet(
     label_font_small = _get_font(28)
     # ISM (first name) field
     draw.text((200, 278), "ISM (BOSMA HARFLAR):", fill="black", font=label_font_small)
-    draw.rectangle([(200, 295), (1050, 360)], outline="black", width=2)
+    draw.rectangle([NAME_FIELD_BOX[:2], NAME_FIELD_BOX[2:]], outline="black", width=2)
 
     # FAMILIYA (surname) field
     draw.text((200, 365), "FAMILIYA (BOSMA HARFLAR):", fill="black", font=label_font_small)
-    draw.rectangle([(200, 382), (1050, 435)], outline="black", width=2)
+    draw.rectangle([SURNAME_FIELD_BOX[:2], SURNAME_FIELD_BOX[2:]], outline="black", width=2)
 
     # Separator line between name fields and student number section
     draw.line([(200, 445), (SHEET_WIDTH - 200, 445)], fill="black", width=2)

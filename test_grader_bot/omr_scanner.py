@@ -28,7 +28,10 @@ from sheet_generator import (
     STUDENT_NUM_Y, STUDENT_NUM_BUBBLE_RADIUS,
     STUDENT_NUM_SPACING_X, STUDENT_NUM_SPACING_Y,
 )
-from name_reader import read_name_from_image
+try:
+    from name_reader import read_name_from_image
+except ImportError:
+    read_name_from_image = None
 
 # ROI size around each bubble center for analysis
 ROI_SIZE = int(BUBBLE_RADIUS * 1.5)
@@ -735,9 +738,16 @@ def scan_answer_sheet(
     )
     _, binary_otsu = cv2.threshold(warped_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
-    # Attempt to read handwritten name from name field
-    detected_name = read_name_from_image(warped_gray, region="name")
-    result["detected_name"] = detected_name
+    # Attempt to read handwritten name from name/surname fields
+    if read_name_from_image:
+        detected_first = read_name_from_image(warped_gray, region="name")
+        detected_last = read_name_from_image(warped_gray, region="surname")
+        if detected_first and detected_last:
+            result["detected_name"] = f"{detected_first} {detected_last}"
+        elif detected_first:
+            result["detected_name"] = detected_first
+        elif detected_last:
+            result["detected_name"] = detected_last
 
     # Detect student number if enabled
     if include_student_numbers:
