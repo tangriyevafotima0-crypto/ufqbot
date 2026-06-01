@@ -588,6 +588,7 @@ def scan_answer_sheet(
         result["student_number"] = student_num
 
     # Calculate grid start Y based on whether student numbers are included
+    # NOTE: This offset formula must stay in sync with sheet_generator._draw_student_number_section layout
     if include_student_numbers:
         grid_y = STUDENT_NUM_Y + 50 + 2 * STUDENT_NUM_SPACING_Y + 30 + 60
     else:

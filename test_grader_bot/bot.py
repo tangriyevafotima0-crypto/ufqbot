@@ -44,8 +44,7 @@ logger = logging.getLogger(__name__)
     BATCH_NAMING,
     AWAITING_ROSTER,
     AWAITING_UNCERTAIN_ANSWERS,
-    AWAITING_EDIT_INPUT,
-) = range(10)
+) = range(9)
 
 
 # ============================================================
@@ -75,10 +74,12 @@ def _load_session(user_id: int) -> dict:
 
 
 def _save_session(user_id: int, data: dict) -> None:
-    """Save session data to JSON file."""
+    """Save session data to JSON file atomically (temp file + os.replace)."""
     path = _get_session_path(user_id)
-    with open(path, "w", encoding="utf-8") as f:
+    tmp_path = path.with_suffix(".tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp_path, path)
 
 
 # ============================================================
@@ -321,7 +322,7 @@ async def receive_roster_text(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     user_id = update.effective_user.id
     session = _load_session(user_id)
-    # Store roster with string keys for JSON compatibility
+    # Roster keys are stored as strings for JSON compatibility; lookups use str(student_number)
     session["roster"] = {str(k): v for k, v in roster.items()}
     _save_session(user_id, session)
 
@@ -556,6 +557,13 @@ async def receive_batch_document(update: Update, context: ContextTypes.DEFAULT_T
         await update.message.reply_text(
             "Iltimos, rasm yuboring.\n"
             "Tugallash uchun /done yuboring."
+        )
+        return BATCH_SCANNING
+
+    # Check file size before downloading (max 10MB)
+    if document.file_size and document.file_size > 10 * 1024 * 1024:
+        await update.message.reply_text(
+            "Fayl hajmi juda katta (max 10MB). Kichikroq rasm yuboring."
         )
         return BATCH_SCANNING
 

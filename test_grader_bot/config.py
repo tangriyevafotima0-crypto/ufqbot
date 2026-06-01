@@ -1,8 +1,11 @@
 """Bot configuration - loads settings from .env file."""
 
+import logging
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # Load .env from the same directory as this file
 BASE_DIR = Path(__file__).resolve().parent
@@ -30,7 +33,7 @@ else:
             try:
                 ADMIN_IDS.append(int(part))
             except (ValueError, TypeError):
-                pass
+                logger.warning("Skipping invalid ADMIN_ID entry: %s", part)
 
 # Directory for storing session data as JSON
 DATA_DIR = BASE_DIR / "data"
