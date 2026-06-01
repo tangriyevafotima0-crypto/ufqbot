@@ -36,5 +36,5 @@
     "test -f /projects/sandbox/ufqbot/UFQ_SYSTEM_v3_fixed.zip && echo 'ZIP exists'"
   ],
   "blocked_reason": null,
-  "findings": "All steps implemented successfully. generate_qr_data now takes (ticket_id, pin) and produces checkin_{id}_{pin} format. scan_checkin() and auto_close_events() added to crud.py. scanner.py deep link handler parses new format. Background task added to main.py. Middleware regex updated. All files parse and imports resolve correctly."
+  "findings": "All steps implemented successfully. generate_qr_data now takes (ticket_id, pin) and produces checkin_{id}_{pin} format. scan_checkin() and auto_close_events() added to crud.py. scanner.py deep link handler parses new format. Background task added to main.py. Middleware regex updated. All files parse and imports resolve correctly. Post-review fixes applied: (1) duplicate report guard in main.py auto_close_task, (2) club-scope check added to scan_checkin, (3) batch DB connections in auto_close_events, (4) dead code verify_and_checkin removed."
 }
