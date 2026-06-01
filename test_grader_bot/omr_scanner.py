@@ -2,13 +2,17 @@
 OMR (Optical Mark Recognition) scanner - detects filled bubbles on answer sheets
 using OpenCV image processing and perspective correction.
 
-Uses relative bubble comparison (comparing fill ratios within the same question)
-instead of absolute thresholds for more robust detection across varying
-lighting and printing conditions.
+Uses a 3-method consensus voting approach:
+  Method A: Relative comparison with baseline subtraction (handles printed letters)
+  Method B: Global Otsu threshold with circular mask (handles varying lighting)
+  Method C: Morphological opening (removes thin strokes, keeps thick fill)
+
+Two out of three methods must agree for a confident detection.
 """
 
 import cv2
 import numpy as np
+from collections import Counter
 from typing import Optional
 
 from sheet_generator import (
@@ -18,11 +22,6 @@ from sheet_generator import (
     STUDENT_NUM_Y, STUDENT_NUM_BUBBLE_RADIUS,
     STUDENT_NUM_SPACING_X, STUDENT_NUM_SPACING_Y,
 )
-
-# Relative comparison thresholds
-RELATIVE_RATIO_THRESHOLD = 1.8  # Darkest must be 1.8x the second darkest
-MIN_FILL_RATIO = 0.12  # Minimum fill ratio to consider as marked
-EMPTY_THRESHOLD = 0.08  # Below this, bubble is considered empty
 
 # ROI size around each bubble center for analysis
 ROI_SIZE = int(BUBBLE_RADIUS * 1.5)
@@ -34,11 +33,19 @@ STUDENT_NUM_ROI_SIZE = int(STUDENT_NUM_BUBBLE_RADIUS * 1.5)
 def _preprocess_image(gray: np.ndarray) -> np.ndarray:
     """
     Preprocess image for better OMR detection.
-    Applies Gaussian blur and CLAHE for contrast normalization.
+    Pipeline: sharpen -> denoise -> CLAHE contrast enhancement.
     """
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    # Step 1: Unsharp mask sharpening
+    blurred = cv2.GaussianBlur(gray, (9, 9), 10.0)
+    sharpened = cv2.addWeighted(gray, 1.5, blurred, -0.5, 0)
+
+    # Step 2: Denoising for noisy phone photos
+    denoised = cv2.fastNlMeansDenoising(sharpened, None, h=10, templateWindowSize=7, searchWindowSize=21)
+
+    # Step 3: CLAHE contrast enhancement
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    enhanced = clahe.apply(blurred)
+    enhanced = clahe.apply(denoised)
+
     return enhanced
 
 
@@ -168,8 +175,7 @@ def _estimate_fourth_corner(three_corners: list, w: int, h: int) -> Optional[np.
         return None
 
     # Estimate the missing corner using parallelogram property
-    # For a rectangle: P_missing = P_opposite_diagonal_start + (P_adj1 - P_opp) + (P_adj2 - P_opp)
-    # Simpler: missing = adj1 + adj2 - opposite
+    # missing = adj1 + adj2 - opposite
     opposite_idx = (missing_idx + 2) % 4
     adj1_idx = (missing_idx + 1) % 4
     adj2_idx = (missing_idx + 3) % 4
@@ -230,7 +236,6 @@ def _detect_corner_markers(gray: np.ndarray) -> Optional[np.ndarray]:
         all_candidates.extend(candidates)
 
     # Strategy 4: If we have exactly 3 corners from any attempt, estimate the 4th
-    # Combine all candidates from all strategies
     combined = _find_square_markers(binary_otsu, gray) + all_candidates
     # Remove duplicates (close points)
     unique_candidates = []
@@ -244,9 +249,7 @@ def _detect_corner_markers(gray: np.ndarray) -> Optional[np.ndarray]:
             unique_candidates.append(c)
 
     if len(unique_candidates) >= 3:
-        # Sort by area and try top candidates
         unique_candidates.sort(key=lambda c: c[2], reverse=True)
-        # Try to select 3 from corners
         img_corners = np.array([[0, 0], [w, 0], [w, h], [0, h]], dtype="float32")
         corner_assigned = []
         used = set()
@@ -257,7 +260,6 @@ def _detect_corner_markers(gray: np.ndarray) -> Optional[np.ndarray]:
                 if i in used:
                     continue
                 dist = np.sqrt((cx - corner[0])**2 + (cy - corner[1])**2)
-                # Only accept if reasonably close to the corner
                 if dist < max(w, h) * 0.3 and dist < best_dist:
                     best_dist = dist
                     best_idx = i
@@ -272,14 +274,12 @@ def _detect_corner_markers(gray: np.ndarray) -> Optional[np.ndarray]:
 
     # Strategy 5: Largest contour approach (find paper boundary)
     _, binary_paper = cv2.threshold(preprocessed, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    # Invert to find white paper on dark background
     binary_inv = cv2.bitwise_not(binary_paper)
     contours, _ = cv2.findContours(binary_inv, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     if contours:
         largest = max(contours, key=cv2.contourArea)
         area = cv2.contourArea(largest)
-        # Paper should be at least 20% of image area
         if area > (w * h) * 0.2:
             peri = cv2.arcLength(largest, True)
             approx = cv2.approxPolyDP(largest, 0.02 * peri, True)
@@ -290,39 +290,44 @@ def _detect_corner_markers(gray: np.ndarray) -> Optional[np.ndarray]:
     return None
 
 
-def _create_binary_image(warped_gray: np.ndarray) -> np.ndarray:
+def _perspective_transform(image: np.ndarray, corners: np.ndarray) -> np.ndarray:
+    """Apply perspective transform to get a flat top-down view."""
+    dst = np.array([
+        [0, 0],
+        [SHEET_WIDTH - 1, 0],
+        [SHEET_WIDTH - 1, SHEET_HEIGHT - 1],
+        [0, SHEET_HEIGHT - 1]
+    ], dtype="float32")
+
+    matrix = cv2.getPerspectiveTransform(corners, dst)
+    warped = cv2.warpPerspective(image, matrix, (SHEET_WIDTH, SHEET_HEIGHT))
+    return warped
+
+
+def _get_fill_ratio_rect(binary_image: np.ndarray, cx: int, cy: int, roi_size: int) -> float:
     """
-    Apply a single adaptive threshold on the entire warped grayscale image.
-    This replaces per-bubble Otsu thresholding.
+    Get fill ratio from a rectangular ROI in the binary image.
+    Used by Method A and Method C.
     """
-    # Gaussian blur to reduce noise
-    blurred = cv2.GaussianBlur(warped_gray, (5, 5), 0)
+    h, w = binary_image.shape
+    x1 = max(0, cx - roi_size)
+    y1 = max(0, cy - roi_size)
+    x2 = min(w, cx + roi_size)
+    y2 = min(h, cy + roi_size)
 
-    # Single adaptive threshold for the whole image
-    binary = cv2.adaptiveThreshold(
-        blurred,
-        255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY_INV,
-        blockSize=51,
-        C=10
-    )
+    roi = binary_image[y1:y2, x1:x2]
+    if roi.size == 0:
+        return 0.0
 
-    return binary
+    total_pixels = roi.shape[0] * roi.shape[1]
+    dark_pixels = cv2.countNonZero(roi)
+    return dark_pixels / total_pixels if total_pixels > 0 else 0.0
 
 
-def _get_fill_ratio(binary_image: np.ndarray, cx: int, cy: int, roi_size: int) -> float:
+def _get_fill_ratio_circular(binary_image: np.ndarray, cx: int, cy: int, roi_size: int) -> float:
     """
-    Count dark pixels in a circular ROI from the pre-thresholded binary image.
-
-    Args:
-        binary_image: Pre-thresholded binary image (white=marked, black=empty)
-        cx: Center X of bubble
-        cy: Center Y of bubble
-        roi_size: Radius of the ROI to analyze
-
-    Returns:
-        Ratio of dark (marked) pixels within the circular region.
+    Get fill ratio using a circular mask within the ROI.
+    Used by Method B for more accurate bubble measurement.
     """
     h, w = binary_image.shape
     x1 = max(0, cx - roi_size)
@@ -348,79 +353,158 @@ def _get_fill_ratio(binary_image: np.ndarray, cx: int, cy: int, roi_size: int) -
     return dark_pixels / total_pixels if total_pixels > 0 else 0.0
 
 
-def _detect_answer_for_question(
-    binary_image: np.ndarray,
-    bubble_positions: list,
-    roi_size: int = ROI_SIZE
-) -> Optional[int]:
+def _method_a_detect(binary_adaptive: np.ndarray, bubble_positions: list, roi_size: int) -> Optional[int]:
     """
-    Detect the answer for a single question using relative comparison.
+    Method A: Relative comparison with baseline subtraction.
 
-    Compares fill ratios of ALL bubbles in one question:
-    - If max_ratio < EMPTY_THRESHOLD: nothing marked -> return None
-    - If darkest is >= RELATIVE_RATIO_THRESHOLD times second darkest
-      AND has ratio > MIN_FILL_RATIO: that is the answer
-    - Otherwise: ambiguous -> return -1
+    For each question's bubbles:
+    1. Get fill ratios from adaptive threshold binary
+    2. Calculate MEDIAN fill ratio (= empty bubble baseline from printed letters)
+    3. Subtract baseline from all ratios
+    4. Adjusted max must be > 0.10 AND > 1.5x adjusted second max
 
-    Args:
-        binary_image: Pre-thresholded binary image
-        bubble_positions: List of (option_index, cx, cy) for this question
-        roi_size: Size of ROI around bubble center
-
-    Returns:
-        option_index (0-based) if clearly detected,
-        None if nothing marked,
-        -1 if ambiguous
+    Returns: option_index or None (nothing detected) or -1 (ambiguous)
     """
+    if not bubble_positions:
+        return None
+
     ratios = []
     for opt_idx, cx, cy in bubble_positions:
-        ratio = _get_fill_ratio(binary_image, cx, cy, roi_size)
+        ratio = _get_fill_ratio_rect(binary_adaptive, cx, cy, roi_size)
         ratios.append((opt_idx, ratio))
 
-    if not ratios:
+    # Calculate median as baseline (represents empty bubble with printed letters)
+    all_ratios = [r for _, r in ratios]
+    baseline = np.median(all_ratios)
+
+    # Subtract baseline
+    adjusted = [(opt_idx, max(0.0, ratio - baseline)) for opt_idx, ratio in ratios]
+
+    # Sort by adjusted ratio descending
+    sorted_adj = sorted(adjusted, key=lambda x: x[1], reverse=True)
+    max_opt, max_adj = sorted_adj[0]
+
+    # Must exceed minimum threshold after baseline subtraction
+    if max_adj < 0.10:
         return None
 
-    # Sort by fill ratio descending
-    sorted_ratios = sorted(ratios, key=lambda x: x[1], reverse=True)
-    max_opt, max_ratio = sorted_ratios[0]
-
-    # If max ratio is below empty threshold, nothing is marked
-    if max_ratio < EMPTY_THRESHOLD:
-        return None
-
-    # If max ratio does not meet minimum fill ratio, treat as empty
-    if max_ratio < MIN_FILL_RATIO:
-        return None
-
-    # Compare with second darkest
-    if len(sorted_ratios) > 1:
-        _, second_ratio = sorted_ratios[1]
-        # Avoid division by zero
-        if second_ratio < 0.001:
-            # Second is essentially empty, first is clearly marked
+    # Compare with second highest
+    if len(sorted_adj) > 1:
+        _, second_adj = sorted_adj[1]
+        if second_adj < 0.001:
             return max_opt
-        if max_ratio >= RELATIVE_RATIO_THRESHOLD * second_ratio:
+        if max_adj >= 1.5 * second_adj:
             return max_opt
         else:
-            # Ambiguous - not enough relative difference
-            return -1
+            return -1  # Ambiguous
     else:
-        # Only one option (shouldn't happen normally)
         return max_opt
 
 
-def _perspective_transform(image: np.ndarray, corners: np.ndarray) -> np.ndarray:
-    """Apply perspective transform to get a flat top-down view."""
-    dst = np.array([
-        [0, 0],
-        [SHEET_WIDTH - 1, 0],
-        [SHEET_WIDTH - 1, SHEET_HEIGHT - 1],
-        [0, SHEET_HEIGHT - 1]
-    ], dtype="float32")
+def _method_b_detect(binary_otsu: np.ndarray, bubble_positions: list, roi_size: int) -> Optional[int]:
+    """
+    Method B: Global Otsu threshold with circular mask.
 
-    matrix = cv2.getPerspectiveTransform(corners, dst)
-    warped = cv2.warpPerspective(image, matrix, (SHEET_WIDTH, SHEET_HEIGHT))
-    return warped
+    1. Uses Otsu-thresholded image (pre-computed for entire warped image)
+    2. For each bubble, count dark pixels in CIRCULAR mask
+    3. Normalize by circle area
+    4. Fixed threshold: 0.35 (filled) vs ~0.05-0.15 (empty)
+
+    Returns: option_index or None or -1
+    """
+    if not bubble_positions:
+        return None
+
+    ratios = []
+    for opt_idx, cx, cy in bubble_positions:
+        ratio = _get_fill_ratio_circular(binary_otsu, cx, cy, roi_size)
+        ratios.append((opt_idx, ratio))
+
+    # Find bubbles above the fixed threshold
+    filled = [(opt_idx, ratio) for opt_idx, ratio in ratios if ratio >= 0.35]
+
+    if len(filled) == 0:
+        return None
+    elif len(filled) == 1:
+        return filled[0][0]
+    else:
+        # Multiple filled - ambiguous
+        return -1
+
+
+def _method_c_detect(binary_adaptive: np.ndarray, bubble_positions: list, roi_size: int) -> Optional[int]:
+    """
+    Method C: Morphological approach.
+
+    1. For each bubble ROI from adaptive threshold
+    2. Apply morphological OPENING (kernel 5x5) - removes thin letter strokes, keeps thick fill
+    3. Count remaining dark pixels
+    4. Threshold at 0.20
+
+    Returns: option_index or None or -1
+    """
+    if not bubble_positions:
+        return None
+
+    kernel = np.ones((5, 5), np.uint8)
+    h, w = binary_adaptive.shape
+
+    ratios = []
+    for opt_idx, cx, cy in bubble_positions:
+        x1 = max(0, cx - roi_size)
+        y1 = max(0, cy - roi_size)
+        x2 = min(w, cx + roi_size)
+        y2 = min(h, cy + roi_size)
+
+        roi = binary_adaptive[y1:y2, x1:x2]
+        if roi.size == 0:
+            ratios.append((opt_idx, 0.0))
+            continue
+
+        # Morphological opening removes thin strokes but keeps thick fill
+        opened = cv2.morphologyEx(roi, cv2.MORPH_OPEN, kernel)
+        total_pixels = roi.shape[0] * roi.shape[1]
+        dark_pixels = cv2.countNonZero(opened)
+        ratio = dark_pixels / total_pixels if total_pixels > 0 else 0.0
+        ratios.append((opt_idx, ratio))
+
+    # Find bubbles above threshold
+    filled = [(opt_idx, ratio) for opt_idx, ratio in ratios if ratio >= 0.20]
+
+    if len(filled) == 0:
+        return None
+    elif len(filled) == 1:
+        return filled[0][0]
+    else:
+        # Multiple filled - ambiguous
+        return -1
+
+
+def _determine_answer(method_a_result: Optional[int], method_b_result: Optional[int], method_c_result: Optional[int]) -> Optional[int]:
+    """
+    Consensus voting across three detection methods.
+
+    - If 2+ of 3 methods agree on the same option: use that answer
+    - If all 3 disagree: return -1 (uncertain)
+    - If only 1 method detected something (others None): use it
+    """
+    results = [method_a_result, method_b_result, method_c_result]
+    non_none = [r for r in results if r is not None and r >= 0]
+
+    if len(non_none) >= 2:
+        counts = Counter(non_none)
+        most_common = counts.most_common(1)[0]
+        if most_common[1] >= 2:
+            return most_common[0]
+
+    if len(non_none) == 1:
+        return non_none[0]
+
+    # Check for ambiguous (-1) results
+    if any(r == -1 for r in results):
+        return -1
+
+    return None  # Nothing detected by any method
 
 
 def _get_bubble_positions(num_questions: int, num_options: int, grid_start_y: int = GRID_START_Y) -> list:
@@ -460,7 +544,7 @@ def _get_bubble_positions(num_questions: int, num_options: int, grid_start_y: in
 def detect_student_number(warped_gray: np.ndarray) -> Optional[int]:
     """
     Detect the student number from the student number bubble section.
-    Uses relative comparison within each row (tens and units).
+    Uses multi-method consensus for each row (tens and units).
 
     Args:
         warped_gray: Grayscale perspective-corrected image
@@ -468,29 +552,40 @@ def detect_student_number(warped_gray: np.ndarray) -> Optional[int]:
     Returns:
         Detected student number (1-50) or None if not detected
     """
-    # Create single binary image for the warped sheet
-    binary = _create_binary_image(warped_gray)
+    # Create both binary images for the warped sheet
+    blurred = cv2.GaussianBlur(warped_gray, (5, 5), 0)
+    binary_adaptive = cv2.adaptiveThreshold(
+        blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY_INV, blockSize=51, C=10
+    )
+    _, binary_otsu = cv2.threshold(warped_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
     section_start_y = STUDENT_NUM_Y + 50
     base_x = 350
 
-    # Row 1: Tens digit (0-4) - use relative comparison
+    # Row 1: Tens digit (0-4)
     tens_positions = []
     for i in range(5):
         cx = base_x + i * STUDENT_NUM_SPACING_X
         cy = section_start_y
         tens_positions.append((i, cx, cy))
 
-    tens_result = _detect_answer_for_question(binary, tens_positions, STUDENT_NUM_ROI_SIZE)
+    tens_a = _method_a_detect(binary_adaptive, tens_positions, STUDENT_NUM_ROI_SIZE)
+    tens_b = _method_b_detect(binary_otsu, tens_positions, STUDENT_NUM_ROI_SIZE)
+    tens_c = _method_c_detect(binary_adaptive, tens_positions, STUDENT_NUM_ROI_SIZE)
+    tens_result = _determine_answer(tens_a, tens_b, tens_c)
 
-    # Row 2: Units digit (0-9) - use relative comparison
+    # Row 2: Units digit (0-9)
     units_positions = []
     for i in range(10):
         cx = base_x + i * STUDENT_NUM_SPACING_X
         cy = section_start_y + STUDENT_NUM_SPACING_Y
         units_positions.append((i, cx, cy))
 
-    units_result = _detect_answer_for_question(binary, units_positions, STUDENT_NUM_ROI_SIZE)
+    units_a = _method_a_detect(binary_adaptive, units_positions, STUDENT_NUM_ROI_SIZE)
+    units_b = _method_b_detect(binary_otsu, units_positions, STUDENT_NUM_ROI_SIZE)
+    units_c = _method_c_detect(binary_adaptive, units_positions, STUDENT_NUM_ROI_SIZE)
+    units_result = _determine_answer(units_a, units_b, units_c)
 
     # Handle tens digit
     tens_digit = tens_result if tens_result is not None and tens_result >= 0 else None
@@ -518,7 +613,7 @@ def scan_answer_sheet(
     include_student_numbers: bool = True,
 ) -> dict:
     """
-    Scan an answer sheet image and grade it.
+    Scan an answer sheet image and grade it using 3-method consensus voting.
 
     Args:
         image_path: Path to the photo of the filled answer sheet
@@ -557,8 +652,32 @@ def scan_answer_sheet(
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # Detect corner markers with multi-stage fallbacks
-    corners = _detect_corner_markers(gray)
+    # Preprocessing: sharpen and denoise
+    preprocessed = _preprocess_image(gray)
+
+    # Detect corner markers with auto-rotation fallback
+    corners = _detect_corner_markers(preprocessed)
+
+    if corners is None:
+        # Auto-rotation: try 90, 180, 270 degree rotations
+        for angle in [90, 180, 270]:
+            if angle == 90:
+                rotated = cv2.rotate(preprocessed, cv2.ROTATE_90_CLOCKWISE)
+                rotated_img = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
+            elif angle == 180:
+                rotated = cv2.rotate(preprocessed, cv2.ROTATE_180)
+                rotated_img = cv2.rotate(image, cv2.ROTATE_180)
+            else:
+                rotated = cv2.rotate(preprocessed, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                rotated_img = cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
+            corners = _detect_corner_markers(rotated)
+            if corners is not None:
+                preprocessed = rotated
+                image = rotated_img
+                gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+                break
+
     if corners is None:
         result["error"] = (
             "Burchak belgilari topilmadi. Barcha usullar sinab ko'rildi:\n"
@@ -566,7 +685,8 @@ def scan_answer_sheet(
             "2) Kengaytirilgan tasvir - muvaffaqiyatsiz\n"
             "3) Turli chegara qiymatlari (80-140) - muvaffaqiyatsiz\n"
             "4) 3 burchakdan 4-ni hisoblash - muvaffaqiyatsiz\n"
-            "5) Varaq chegarasini aniqlash - muvaffaqiyatsiz\n\n"
+            "5) Varaq chegarasini aniqlash - muvaffaqiyatsiz\n"
+            "6) 90/180/270 daraja aylantirish - muvaffaqiyatsiz\n\n"
             "Iltimos qaytadan suratga oling:\n"
             "- Varaqni tekis joyga qo'ying\n"
             "- 4 ta burchak belgilari aniq ko'rinsin\n"
@@ -579,8 +699,13 @@ def scan_answer_sheet(
     warped = _perspective_transform(image, corners)
     warped_gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
 
-    # Create single adaptive threshold binary image for the entire warped sheet
-    binary = _create_binary_image(warped_gray)
+    # Create BOTH binary images on the warped result
+    blurred_warped = cv2.GaussianBlur(warped_gray, (5, 5), 0)
+    binary_adaptive = cv2.adaptiveThreshold(
+        blurred_warped, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY_INV, blockSize=51, C=10
+    )
+    _, binary_otsu = cv2.threshold(warped_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
     # Detect student number if enabled
     if include_student_numbers:
@@ -588,7 +713,7 @@ def scan_answer_sheet(
         result["student_number"] = student_num
 
     # Calculate grid start Y based on whether student numbers are included
-    # NOTE: This offset formula must stay in sync with sheet_generator._draw_student_number_section layout
+    # This offset formula stays in sync with sheet_generator._draw_student_number_section layout
     if include_student_numbers:
         grid_y = STUDENT_NUM_Y + 50 + 2 * STUDENT_NUM_SPACING_Y + 30 + 60
     else:
@@ -604,13 +729,20 @@ def scan_answer_sheet(
             question_bubbles[q_idx] = []
         question_bubbles[q_idx].append((opt_idx, cx, cy))
 
-    # Detect answers using relative comparison per question
+    # Detect answers using 3-method consensus voting per question
     score = 0
     uncertain_questions = []
 
     for q_idx in range(num_questions):
         bubbles = question_bubbles.get(q_idx, [])
-        detected_opt = _detect_answer_for_question(binary, bubbles)
+
+        # Run all three methods
+        result_a = _method_a_detect(binary_adaptive, bubbles, ROI_SIZE)
+        result_b = _method_b_detect(binary_otsu, bubbles, ROI_SIZE)
+        result_c = _method_c_detect(binary_adaptive, bubbles, ROI_SIZE)
+
+        # Consensus voting
+        detected_opt = _determine_answer(result_a, result_b, result_c)
 
         if detected_opt is None:
             # No answer detected
@@ -644,3 +776,4 @@ def scan_answer_sheet(
     result["score"] = score
     result["uncertain_questions"] = uncertain_questions
     return result
+

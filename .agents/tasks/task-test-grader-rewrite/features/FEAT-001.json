@@ -1,0 +1,34 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Complete rewrite of omr_scanner.py to implement 3-method consensus-based bubble detection that fixes the 0-score bug, plus image preprocessing pipeline for blurry/skewed photos",
+  "status": "in_progress",
+  "steps": [
+    "Rewrite omr_scanner.py keeping the existing _detect_corner_markers() 5-stage fallback system (it works well), _order_points(), _find_square_markers(), _select_best_four_corners(), _estimate_fourth_corner(), and _perspective_transform() functions intact",
+    "Add image preprocessing pipeline at the top of scan_answer_sheet(): (1) auto-rotation detection - try 90/180/270 if corners not found, (2) sharpening via unsharp mask (cv2.GaussianBlur subtraction), (3) denoising with cv2.fastNlMeansDenoising for noisy photos, (4) keep existing CLAHE contrast enhancement",
+    "Implement Method A (primary - relative with baseline subtraction): adaptive threshold on warped image, get fill ratios for each question's bubbles, calculate MEDIAN fill ratio as empty baseline, subtract baseline from all ratios, adjusted max must be > 0.10 AND > 1.5x adjusted second max",
+    "Implement Method B (secondary - global Otsu + histogram): apply Otsu threshold to entire warped image, for each bubble count dark pixels in CIRCULAR mask (not square ROI), normalize by circle area, use fixed threshold of 0.35 for filled vs empty",
+    "Implement Method C (tertiary - morphological approach): adaptive threshold, for each bubble ROI apply morphological OPENING with kernel size ~5 to remove thin letter strokes but keep thick pen fill, count remaining dark pixels, threshold at 0.20",
+    "Implement consensus voting function determine_answer(): if 2 out of 3 methods agree use that answer, if all 3 disagree mark as uncertain (-1), if only 1 method detects something use it with lower confidence",
+    "Fix the grid_y calculation: ensure the formula for grid_start_y when include_student_numbers=True stays in sync with sheet_generator._draw_student_number_section layout (STUDENT_NUM_Y + 50 + 2*STUDENT_NUM_SPACING_Y + 30 + 60)",
+    "Update detect_student_number() to also use multi-method approach for better reliability",
+    "Keep all imports from sheet_generator.py (SHEET_WIDTH, SHEET_HEIGHT, MARKER_SIZE, etc.) - these coordinate the grid layout between generator and scanner",
+    "Ensure the function signature and return format of scan_answer_sheet() remains the same (answers, score, total, details, student_number, uncertain_questions, error) for backward compatibility with bot.py"
+  ],
+  "acceptance_criteria": [
+    "omr_scanner.py imports successfully: python -c 'from omr_scanner import scan_answer_sheet, detect_student_number'",
+    "Three scanning methods (method_a, method_b, method_c) are implemented as separate functions",
+    "Consensus voting determine_answer() function matches the spec (majority vote, single-method fallback, uncertain=-1)",
+    "Image preprocessing includes sharpening, denoising, and auto-rotation detection",
+    "All existing corner detection strategies (5 stages) are preserved",
+    "Return format of scan_answer_sheet() is unchanged (dict with answers, score, total, details, student_number, uncertain_questions, error)",
+    "No new pip dependencies added"
+  ],
+  "verification": [
+    "cd /projects/sandbox/ufqbot/test_grader_bot && python -c 'from omr_scanner import scan_answer_sheet, detect_student_number; print(\"OK\")'",
+    "cd /projects/sandbox/ufqbot/test_grader_bot && python -c 'import inspect; from omr_scanner import scan_answer_sheet; sig = inspect.signature(scan_answer_sheet); assert \"image_path\" in str(sig); assert \"num_questions\" in str(sig); print(\"Signature OK\")'",
+    "cd /projects/sandbox/ufqbot/test_grader_bot && python -c 'from omr_scanner import _method_a_detect, _method_b_detect, _method_c_detect, _determine_answer; print(\"All methods exist\")'"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
