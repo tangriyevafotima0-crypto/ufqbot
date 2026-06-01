@@ -1,5 +1,5 @@
 """
-Main Telegram bot for test grading using OMR (V3).
+Main Telegram bot for test grading using OMR (V5).
 Features: roster auto-naming, /edit command, document support,
 uncertain answer handling, multi-admin support.
 """
