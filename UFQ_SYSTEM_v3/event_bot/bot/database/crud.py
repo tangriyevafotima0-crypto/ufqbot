@@ -431,10 +431,14 @@ async def verify_and_checkin(security_hash: str, event_id: int, scanner_tg_id: i
         ticket = ticket_result.scalars().first()
 
         if not ticket:
+            logger.warning(
+                f"QR SCAN FAILED: Ticket not found. security_hash='{security_hash}', event_id={event_id}"
+            )
             return False, "Noto'g'ri yoki yaroqsiz chipta!", None
 
         # Already used?
         if ticket.is_used:
+            logger.info(f"QR SCAN FAILED: Ticket already used. ticket_id={ticket.id}, used_at={ticket.used_at}")
             used_time = ticket.used_at.strftime("%H:%M") if ticket.used_at else "noma'lum vaqt"
             return False, f"Bu chipta allaqachon ishlatilgan!\nSkanerlangan vaqt: {used_time}", None
 
@@ -481,6 +485,9 @@ async def verify_and_checkin(security_hash: str, event_id: int, scanner_tg_id: i
         # Check scanner can manage this event (same club or SUPER_ADMIN)
         if not is_admin:
             if event.club_id and scanner.get('club_id') != event.club_id:
+                logger.warning(
+                    f"QR SCAN FAILED: Club mismatch. scanner_club={scanner.get('club_id')}, event_club={event.club_id}"
+                )
                 return False, "Siz bu tadbirni boshqara olmaysiz!", None
 
         # Find registration
@@ -493,6 +500,9 @@ async def verify_and_checkin(security_hash: str, event_id: int, scanner_tg_id: i
         registration = reg_result.scalars().first()
 
         if not registration:
+            logger.warning(
+                f"QR SCAN FAILED: No registration. user_id={ticket.user_id}, event_id={event_id}"
+            )
             return False, "Foydalanuvchi bu tadbirga ro'yxatdan o'tmagan!", None
 
         # Perform check-in
@@ -552,6 +562,8 @@ async def verify_and_checkin(security_hash: str, event_id: int, scanner_tg_id: i
         'new_points': new_points,
         'user_notify_msg': user_notify_msg,
     }
+
+    logger.info(f"QR SCAN SUCCESS: ticket_id={ticket.id}, user={user_data['full_name']}, event={event.title}")
 
     return True, scanner_msg, extra
 

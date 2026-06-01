@@ -26,7 +26,7 @@ class CheckSubMiddleware(BaseMiddleware):
         # obuna tekshiruvini o'tkazib yuborish. Skaner CP/admin bo'lib,
         # kanal a'zoligi yo'qolgan bo'lsa ham QR ishlashi kerak.
         if isinstance(event, Message) and event.text:
-            if re.match(r'^/start\s+chk_', event.text.strip()):
+            if re.match(r'^/start(@\w+)?\s+chk_', event.text.strip()):
                 return await handler(event, data)
 
         # Agar CHANNELS bo'sh bo'lsa, tekshiruv o'tkazilmaydi

@@ -1,0 +1,35 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Fix QR code scanning not working - multiple issues causing 'Noto'g'ri yoki yaroqsiz chipta!' error for both Super Admin and Club President scanners",
+  "status": "in_progress",
+  "steps": [
+    "Step 1: Fix deploy.sh BOT_USERNAME prompt confusion. The prompt says 'Bot Username (masalan: UFQ_JAMOA_BOT)' which uses the TEAM bot as example. This causes users to enter the team bot username instead of event bot username. The QR code deep link opens the wrong bot and scanning fails completely. Split into two separate prompts: TEAM_BOT_USERNAME and EVENT_BOT_USERNAME. Only EVENT_BOT_USERNAME is used in event_bot/.env. Add validation that BOT_USERNAME must not be empty.",
+    "Step 2: Fix scanner.py hash parsing to be robust against edge cases. Currently `parts = args.split('_')` then `security_hash = parts[3][1:]`. If for ANY reason there are more than 4 parts (e.g., future format changes), the hash gets truncated. Fix: join all parts from index 3 onward, then strip the 'S' prefix. Also add explicit format validation (check parts[1] starts with 'E', parts[2] starts with 'U', parts[3] starts with 'S').",
+    "Step 3: Add comprehensive debug logging to scanner.py handle_deep_link. Before calling verify_and_checkin, log: the raw args string, parsed event_id, parsed user_tg_id, parsed security_hash, and scanner telegram_id. This is critical for diagnosing production issues.",
+    "Step 4: Add comprehensive debug logging to crud.py verify_and_checkin. At each potential failure point, log what was compared. Specifically: (a) log the security_hash and event_id being searched, (b) if ticket is None, log 'Ticket not found for hash=X event_id=Y', (c) if ticket.is_used, log 'Ticket already used', (d) if user_tg_id mismatch, log both values, (e) if club_id mismatch for non-admin scanner, log both club_ids.",
+    "Step 5: Add startup diagnostic logging in main.py. When bot starts, log BOT_USERNAME and SUPER_ADMIN_ID values so operators can immediately verify the configuration is correct without inspecting .env files.",
+    "Step 6: Make the middleware QR bypass more bulletproof in check_sub.py. The current regex r'^/start\\s+chk_' works but could fail if Telegram sends the message in a different format (e.g., with bot mention: '/start@BotName chk_...'). Update regex to handle the @botname case: r'^/start(@\\w+)?\\s+chk_'.",
+    "Step 7: Regenerate UFQ_SYSTEM_v3_fixed.zip with all fixes included."
+  ],
+  "acceptance_criteria": [
+    "deploy.sh asks for Event Bot Username separately with a clear example like 'Event Bot Username (masalan: UFQ_EVENT_BOT)'",
+    "scanner.py handles QR data parsing robustly - joins remaining parts after split if hash contains underscore somehow",
+    "scanner.py logs raw args, parsed components before verify_and_checkin call",
+    "verify_and_checkin logs at each failure branch with the compared values",
+    "main.py logs BOT_USERNAME and SUPER_ADMIN_ID on startup",
+    "check_sub.py middleware regex handles /start@botname format",
+    "All .py files pass py_compile without errors",
+    "UFQ_SYSTEM_v3_fixed.zip is regenerated"
+  ],
+  "verification": [
+    "Run: python -m py_compile UFQ_SYSTEM_v3/event_bot/bot/handlers/scanner.py",
+    "Run: python -m py_compile UFQ_SYSTEM_v3/event_bot/bot/database/crud.py",
+    "Run: python -m py_compile UFQ_SYSTEM_v3/event_bot/bot/config.py",
+    "Run: python -m py_compile UFQ_SYSTEM_v3/event_bot/bot/main.py",
+    "Run: python -m py_compile UFQ_SYSTEM_v3/event_bot/bot/middlewares/check_sub.py",
+    "Verify UFQ_SYSTEM_v3_fixed.zip exists and is non-empty"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
