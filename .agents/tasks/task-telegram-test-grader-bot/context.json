@@ -1,0 +1,20 @@
+{
+  "project_type": "Python Telegram Bot - Test/Exam Grading with OMR",
+  "language": "Python 3.11",
+  "build_system": "pip with requirements.txt, deployed via systemd service",
+  "test_framework": "Manual verification - no existing test framework in repo",
+  "build_command": "pip install -r test_grader_bot/requirements.txt",
+  "test_command": "cd /projects/sandbox/ufqbot/test_grader_bot && python -c \"import bot; import config; import sheet_generator; import omr_scanner; import excel_export; print('All imports OK')\"",
+  "verification_instructions": "1. Install dependencies with pip. 2. Verify all modules import without error. 3. Run sheet_generator to produce a sample answer sheet image. 4. Verify omr_scanner can process a synthetically generated filled sheet.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "1. cd /projects/sandbox/ufqbot/test_grader_bot. 2. pip install -r requirements.txt. 3. Create .env with BOT_TOKEN and ADMIN_ID. 4. python bot.py",
+  "environment_constraints": "OPEN_INTERNET network - can install any packages. Python 3.11 available via pyenv. Target deployment: AWS free tier 2GB RAM with swap, bot must use under 120MB RAM. Use OpenCV OMR (not Tesseract) for lightweight bubble detection.",
+  "contribution_requirements": "Create all files in test_grader_bot/ directory at repo root. Do NOT modify UFQ_SYSTEM_v3/ folder.",
+  "key_patterns": "Existing bots use: .env for config, systemd for service management, deploy.sh for deployment scripts, async patterns, Uzbek language UI. The existing event_bot uses aiogram but this new bot uses python-telegram-bot async version as specified.",
+  "relevant_files": [
+    "UFQ_SYSTEM_v3/deploy.sh",
+    "UFQ_SYSTEM_v3/event_bot/bot/config.py",
+    "UFQ_SYSTEM_v3/event_bot/bot/main.py"
+  ],
+  "directory_structure": "Repository root: UFQ_SYSTEM_v3/ (existing bot system - DO NOT TOUCH), .agents/ (task tracking). New code goes in test_grader_bot/ at root level."
+}

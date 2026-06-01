@@ -1,0 +1,34 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Create the complete test grader Telegram bot with all components: config, sheet generator, OMR scanner, Excel export, bot handlers, deployment script, and README",
+  "status": "completed",
+  "steps": [
+    "Create test_grader_bot/requirements.txt with dependencies: python-telegram-bot[ext]>=20.0, opencv-python-headless, Pillow, openpyxl, numpy, python-dotenv",
+    "Create test_grader_bot/config.py - Load BOT_TOKEN and ADMIN_ID from .env file using python-dotenv. Define DATA_DIR path for JSON session storage.",
+    "Create test_grader_bot/sheet_generator.py - Generate A4 answer sheets (2480x3508 at 300 DPI) with: 4 corner alignment markers (filled black squares ~50x50px), title 'TEST JAVOB VARAQASI', name/surname lines, question grid with A/B/C/D (or A/B/C/D/E) bubbles. Support 2-column layout for >20 questions. Each bubble is a hollow circle. Question numbers on left side. Return PIL Image object.",
+    "Create test_grader_bot/omr_scanner.py - OMR bubble detection using OpenCV: 1) Convert to grayscale, apply threshold. 2) Detect 4 corner alignment markers using contour detection (find large filled squares). 3) Apply perspective transform to correct skew/rotation. 4) Divide bubble area into grid based on known layout from sheet_generator. 5) For each bubble cell, calculate dark pixel fill ratio. 6) Threshold (e.g., >0.3 fill ratio) to determine marked answers. 7) Return list of detected answers per question, handle multiple marks (mark as invalid) and no marks (mark as unanswered).",
+    "Create test_grader_bot/excel_export.py - Generate Excel file using openpyxl with columns: Rank, Name, Surname, Score, Percentage, Correct answers detail. Sort students by score descending. Add header row with bold styling. Return BytesIO buffer.",
+    "Create test_grader_bot/bot.py - Main bot entry point using python-telegram-bot async (Application class). Implement conversation handlers with states: AWAITING_NUM_QUESTIONS, AWAITING_NUM_OPTIONS, AWAITING_ANSWERS, AWAITING_SCAN_PHOTO, AWAITING_STUDENT_NAME. Commands: /start (welcome), /new_test (create session), /scan (start scanning mode), /results (generate Excel), /cancel (cancel session). Store session data as JSON in test_grader_bot/data/ directory. Flow: /new_test -> ask num questions -> ask num options -> ask correct answers (as string like 'ABCDABCD...' or comma-separated) -> generate sheet image -> send to teacher. /scan -> teacher sends photo -> bot processes with OMR -> asks teacher to type student name -> confirms score -> stores result. /results -> generates and sends Excel file.",
+    "Create test_grader_bot/deploy.sh - Deployment script following the pattern from UFQ_SYSTEM_v3/deploy.sh: ask for BOT_TOKEN and ADMIN_ID, create venv, install requirements, create .env file, set up systemd service 'ufq-test-grader-bot', enable and start service.",
+    "Create test_grader_bot/README.md - Usage instructions in Uzbek language covering: installation, configuration, bot commands, how the answer sheet works, tips for photographing sheets (good lighting, flat surface, all 4 corners visible)."
+  ],
+  "acceptance_criteria": [
+    "All Python files import successfully without errors",
+    "sheet_generator.py can generate a valid PNG image of an answer sheet with visible corner markers and bubble grid",
+    "omr_scanner.py contains complete OMR logic with perspective transform and bubble detection",
+    "bot.py has all conversation handlers wired up with proper state management",
+    "excel_export.py produces a valid .xlsx file from sample data",
+    "deploy.sh is executable and creates a systemd service",
+    "requirements.txt lists all needed packages"
+  ],
+  "verification": [
+    "Run: cd /projects/sandbox/ufqbot/test_grader_bot && pip install -r requirements.txt",
+    "Run: python -c \"from sheet_generator import generate_answer_sheet; img = generate_answer_sheet(30, 4); img.save('/tmp/test_sheet.png'); print('Sheet generated:', img.size)\"",
+    "Run: python -c \"from excel_export import generate_results_excel; buf = generate_results_excel([{'name': 'Test', 'surname': 'User', 'score': 25, 'total': 30, 'answers': []}]); print('Excel size:', len(buf.getvalue()), 'bytes')\"",
+    "Run: python -c \"import omr_scanner; print('OMR module loaded successfully')\"",
+    "Run: python -c \"import bot; print('Bot module loaded successfully')\""
+  ],
+  "blocked_reason": null,
+  "findings": "All modules import and verify correctly. Python 3.11.15 via pyenv used. pip install succeeded with python-telegram-bot 22.7, opencv-python-headless 4.13, Pillow 12.2, openpyxl 3.1.5, numpy 2.4.6. Sheet generator produces 2480x3508 PNG. Excel export produces valid xlsx. deploy.sh set executable."
+}

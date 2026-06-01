@@ -1,0 +1,34 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Rewrite omr_scanner.py with relative bubble detection and forgiving OMR fallbacks. Replace absolute Otsu-per-ROI approach with relative comparison across all bubbles in a question, and add multi-stage corner detection fallbacks.",
+  "status": "completed",
+  "steps": [
+    "Rewrite test_grader_bot/omr_scanner.py completely with these changes:",
+    "1. Replace _analyze_bubble() with a new approach: apply a SINGLE adaptive threshold (cv2.adaptiveThreshold) on the entire warped grayscale image ONCE after perspective correction. Store this as the pre-thresholded binary image.",
+    "2. Create _get_fill_ratio(binary_image, cx, cy, roi_size) that simply counts dark pixels in a circular ROI from the pre-thresholded image (no per-bubble Otsu).",
+    "3. Create _detect_answer_for_question(binary_image, bubble_positions_for_question) implementing relative comparison: get fill ratios for ALL bubbles of one question, find the darkest, check if it's 1.8x darker than the second-darkest AND has ratio > 0.12. If max_ratio < 0.08, return None (nothing marked). If ambiguous (not 1.8x difference), return -1.",
+    "4. Rewrite the main answer detection loop in scan_answer_sheet() to use _detect_answer_for_question() per question instead of analyzing bubbles individually.",
+    "5. Enhance _detect_corner_markers() with forgiving fallbacks: (a) try normal detection first, (b) if fails, try with dilated binary image (cv2.dilate with 3x3 kernel), (c) try multiple threshold values (manual thresholds at 80, 100, 120, 140 in addition to Otsu), (d) if 3 corners found, estimate the 4th using geometric relationship, (e) if still fails, try largest-contour approach to find paper boundary.",
+    "6. Update detect_student_number() to also use the relative comparison approach - for each row, compare ratios relatively rather than against absolute FILL_THRESHOLD.",
+    "7. Add partial result reporting: when some questions are uncertain (return -1), include them in a new 'uncertain_questions' list in the result dict. Change the result dict to include: 'uncertain_questions': list of question numbers that were ambiguous.",
+    "8. Return more helpful error messages: if corner detection fails after all fallbacks, specify which fallback stage failed and give specific Uzbek-language feedback.",
+    "9. Keep all imports from sheet_generator.py (SHEET_WIDTH, SHEET_HEIGHT, etc.) unchanged.",
+    "10. Maintain the same scan_answer_sheet() function signature and return dict structure (adding uncertain_questions field). Ensure backward compatibility."
+  ],
+  "acceptance_criteria": [
+    "omr_scanner.py imports successfully: python -c 'from test_grader_bot.omr_scanner import scan_answer_sheet, detect_student_number'",
+    "scan_answer_sheet() returns the same dict structure with added 'uncertain_questions' key",
+    "_detect_corner_markers() tries at least 3 different detection strategies before returning None",
+    "No per-bubble Otsu threshold - single adaptive threshold applied once to the warped image",
+    "Relative comparison uses 1.8x ratio threshold and 0.12 minimum fill ratio",
+    "All user-facing error messages are in Uzbek"
+  ],
+  "verification": [
+    "cd /projects/sandbox/ufqbot && python -c \"from test_grader_bot.omr_scanner import scan_answer_sheet, detect_student_number; print('OK')\"",
+    "cd /projects/sandbox/ufqbot && python -c \"import ast; ast.parse(open('test_grader_bot/omr_scanner.py').read()); print('Syntax OK')\"",
+    "cd /projects/sandbox/ufqbot && python -c \"from test_grader_bot.omr_scanner import scan_answer_sheet; import inspect; sig = inspect.signature(scan_answer_sheet); assert 'image_path' in sig.parameters; assert 'num_questions' in sig.parameters; print('Signature OK')\""
+  ],
+  "blocked_reason": null,
+  "findings": "All verification passed. Dependencies already installed. Import works both with sys.path manipulation and from within test_grader_bot/ directory. The __pycache__ directory was pre-existing and not committed."
+}

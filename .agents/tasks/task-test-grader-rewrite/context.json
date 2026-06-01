@@ -1,0 +1,24 @@
+{
+  "project_type": "Python Telegram bot for OMR (Optical Mark Recognition) test grading",
+  "language": "Python 3.11",
+  "build_system": "pip with requirements.txt, deploy.sh for systemd service",
+  "test_framework": "No formal test suite - validation is done by running import checks and generating sheets",
+  "build_command": "cd /projects/sandbox/ufqbot/test_grader_bot && python -c 'import bot; import omr_scanner; import sheet_generator; import excel_export; import config; print(\"OK\")'",
+  "test_command": "cd /projects/sandbox/ufqbot/test_grader_bot && python -c 'from sheet_generator import generate_answer_sheet; from omr_scanner import scan_answer_sheet; print(\"Imports OK\")'",
+  "verification_instructions": "1. Run import checks for all modules. 2. Generate a test sheet and verify it creates a valid PNG. 3. Verify the multi-method scanner logic is syntactically correct and importable. 4. Verify shared test storage creates/reads JSON files in data/tests/.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "pip install opencv-python-headless Pillow openpyxl numpy python-dotenv python-telegram-bot",
+  "environment_constraints": "OPEN_INTERNET network mode. Python 3.11 available via pyenv. No Docker needed - direct Python execution. Must stay under 120MB RAM at runtime. Target server: 2GB RAM AWS free tier with ~300MB already used by 2 other bots.",
+  "contribution_requirements": "All user-facing text must be in Uzbek. No new pip dependencies beyond what is in requirements.txt. JSON file storage only.",
+  "key_patterns": "Single-file modules: config.py (settings), bot.py (telegram handlers), omr_scanner.py (CV processing), sheet_generator.py (Pillow image generation), excel_export.py (openpyxl). Data stored in data/ directory as JSON. Session-based state via JSON files. python-telegram-bot ConversationHandler pattern.",
+  "relevant_files": [
+    "test_grader_bot/omr_scanner.py",
+    "test_grader_bot/bot.py",
+    "test_grader_bot/config.py",
+    "test_grader_bot/deploy.sh",
+    "test_grader_bot/sheet_generator.py",
+    "test_grader_bot/excel_export.py",
+    "test_grader_bot/requirements.txt"
+  ],
+  "directory_structure": "test_grader_bot/ - main bot directory. test_grader_bot/data/ - runtime data storage (sessions, tests). Sheet layout constants shared between sheet_generator.py and omr_scanner.py."
+}

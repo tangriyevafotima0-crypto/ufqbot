@@ -1,0 +1,38 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Rewrite config.py for multi-admin support and excel_export.py to include student number column. Update deploy.sh to support ADMIN_IDS.",
+  "status": "completed",
+  "steps": [
+    "1. Rewrite test_grader_bot/config.py:",
+    "   - Keep BOT_TOKEN loading from .env",
+    "   - Replace single ADMIN_ID with ADMIN_IDS as a list of ints parsed from comma-separated .env value (e.g. ADMIN_IDS=123456,789012)",
+    "   - Keep backward compatibility: if ADMIN_IDS not set, fall back to ADMIN_ID env var (single value)",
+    "   - Keep DATA_DIR and MAX_STUDENTS unchanged",
+    "   - Export ADMIN_IDS as a list (e.g., [123456, 789012])",
+    "2. Rewrite test_grader_bot/excel_export.py:",
+    "   - Add 'Raqam' (student number) column after '#' column",
+    "   - Headers become: #, Raqam, Ism, Familiya, Ball, Foiz, Javoblar",
+    "   - Show student_number from each student record (or '-' if None)",
+    "   - Keep sorting by score descending",
+    "   - Adjust column widths appropriately",
+    "3. Update test_grader_bot/deploy.sh:",
+    "   - Change the prompt from 'Admin Telegram ID' to 'Admin Telegram ID(s) (vergul bilan ajrating)'",
+    "   - Write ADMIN_IDS instead of ADMIN_ID to .env file",
+    "   - Keep the variable name as ADMIN_IDS in .env"
+  ],
+  "acceptance_criteria": [
+    "config.py exports ADMIN_IDS as a list of integers",
+    "config.py gracefully handles: single ID, comma-separated IDs, empty/missing value",
+    "excel_export.py generates xlsx with student number column",
+    "deploy.sh writes ADMIN_IDS to .env",
+    "All modules import without error"
+  ],
+  "verification": [
+    "cd /projects/sandbox/ufqbot && python -c \"from test_grader_bot.config import ADMIN_IDS; assert isinstance(ADMIN_IDS, list); print('Config OK:', ADMIN_IDS)\"",
+    "cd /projects/sandbox/ufqbot && python -c \"from test_grader_bot.excel_export import generate_results_excel; buf = generate_results_excel([{'name':'Ali','surname':'V','score':5,'total':10,'answers':['A','B'],'student_number':3}]); print('Excel OK, size:', len(buf.getvalue()))\"",
+    "cd /projects/sandbox/ufqbot && python -c \"import ast; ast.parse(open('test_grader_bot/config.py').read()); ast.parse(open('test_grader_bot/excel_export.py').read()); print('Syntax OK')\""
+  ],
+  "blocked_reason": null,
+  "findings": "Also updated bot.py to import ADMIN_IDS (list) instead of ADMIN_ID (int) and changed the admin check to use 'in' operator. All verification passed. The __pycache__ directory was not committed."
+}
