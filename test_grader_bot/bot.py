@@ -19,7 +19,7 @@ from telegram.ext import (
     filters,
 )
 
-from config import BOT_TOKEN, ADMIN_ID, DATA_DIR, MAX_STUDENTS
+from config import BOT_TOKEN, ADMIN_IDS, DATA_DIR, MAX_STUDENTS
 from sheet_generator import generate_answer_sheet
 from omr_scanner import scan_answer_sheet
 from excel_export import generate_results_excel
@@ -70,7 +70,7 @@ def _save_session(user_id: int, data: dict) -> None:
 
 async def _check_admin(update: Update) -> bool:
     """Check if the user is the admin. If not, send a rejection message."""
-    if update.effective_user.id != ADMIN_ID:
+    if update.effective_user.id not in ADMIN_IDS:
         await update.message.reply_text("Sizda ruxsat yo'q.")
         return False
     return True

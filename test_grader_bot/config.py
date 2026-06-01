@@ -9,7 +9,28 @@ BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+
+# Multi-admin support: ADMIN_IDS as comma-separated values
+# Falls back to single ADMIN_ID for backward compatibility
+_admin_ids_raw = os.getenv("ADMIN_IDS", "")
+if not _admin_ids_raw.strip():
+    # Fallback to ADMIN_ID (single value) for backward compatibility
+    _admin_id_raw = os.getenv("ADMIN_ID", "0")
+    try:
+        _fallback = int(_admin_id_raw.strip())
+        ADMIN_IDS = [_fallback] if _fallback != 0 else []
+    except (ValueError, TypeError):
+        ADMIN_IDS = []
+else:
+    # Parse comma-separated list
+    ADMIN_IDS = []
+    for part in _admin_ids_raw.split(","):
+        part = part.strip()
+        if part:
+            try:
+                ADMIN_IDS.append(int(part))
+            except (ValueError, TypeError):
+                pass
 
 # Directory for storing session data as JSON
 DATA_DIR = BASE_DIR / "data"

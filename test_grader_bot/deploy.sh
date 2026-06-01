@@ -23,16 +23,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "Iltimos, quyidagi ma'lumotlarni kiriting:"
 echo ""
 read -p "Bot Token: " BOT_TOKEN
-read -p "Admin Telegram ID: " ADMIN_ID
+read -p "Admin Telegram ID(s) (vergul bilan ajrating): " ADMIN_IDS
 
-if [ -z "$BOT_TOKEN" ] || [ -z "$ADMIN_ID" ]; then
-    echo "XATOLIK: BOT_TOKEN va ADMIN_ID majburiy!"
+if [ -z "$BOT_TOKEN" ] || [ -z "$ADMIN_IDS" ]; then
+    echo "XATOLIK: BOT_TOKEN va ADMIN_IDS majburiy!"
     exit 1
 fi
 
 echo ""
 echo ">>> Sozlamalar:"
-echo "   Admin ID: $ADMIN_ID"
+echo "   Admin IDs: $ADMIN_IDS"
 echo "   O'rnatish: $INSTALL_DIR"
 echo ""
 
@@ -65,7 +65,7 @@ echo "   Fayllar ko'chirildi."
 echo ">>> [3/6] .env fayl yaratilmoqda..."
 cat > "$INSTALL_DIR/.env" << EOF
 BOT_TOKEN=$BOT_TOKEN
-ADMIN_ID=$ADMIN_ID
+ADMIN_IDS=$ADMIN_IDS
 EOF
 chmod 600 "$INSTALL_DIR/.env"
 
