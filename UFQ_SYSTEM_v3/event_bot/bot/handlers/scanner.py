@@ -16,61 +16,65 @@ async def handle_deep_link(message: Message, command: CommandObject):
 
     args = command.args
 
-    if args.startswith("chk_"):
-        try:
-            parts = args.split("_")
-            if len(parts) < 4:
-                return await message.answer("Noto'g'ri QR kod formati!")
+    # NOTE: This handler catches ALL deep links. Only chk_ prefix is processed.
+    # Non-chk_ deep links will get no response (no other deep link handlers exist).
+    if not args.startswith("chk_"):
+        return
 
-            # Validate format
-            if not parts[1].startswith('E') or not parts[2].startswith('U') or not parts[3].startswith('S'):
-                return await message.answer("Noto'g'ri QR kod formati!")
+    try:
+        parts = args.split("_")
+        if len(parts) < 4:
+            return await message.answer("Noto'g'ri QR kod formati!")
 
-            event_id_str = parts[1][1:]  # E12 -> 12
-            user_tg_id_str = parts[2][1:]  # U987654321 -> 987654321
-            # Join remaining parts in case hash somehow got split (defensive)
-            security_hash = "_".join(parts[3:])[1:]  # Remove 'S' then join
+        # Validate format
+        if not parts[1].startswith('E') or not parts[2].startswith('U') or not parts[3].startswith('S'):
+            return await message.answer("Noto'g'ri QR kod formati!")
 
-            event_id = int(event_id_str)
-            user_tg_id = int(user_tg_id_str)
+        event_id_str = parts[1][1:]  # E12 -> 12
+        user_tg_id_str = parts[2][1:]  # U987654321 -> 987654321
+        # Remove 'S' prefix from first hash part, then join remaining (defensive)
+        security_hash = parts[3][1:] + ("_" + "_".join(parts[4:]) if len(parts) > 4 else "")
 
-            logger.info(
-                f"QR SCAN: scanner={message.from_user.id}, raw_args='{args}', "
-                f"event_id={event_id}, user_tg_id={user_tg_id}, hash='{security_hash}'"
+        event_id = int(event_id_str)
+        user_tg_id = int(user_tg_id_str)
+
+        logger.info(
+            f"QR SCAN: scanner={message.from_user.id}, raw_args='{args}', "
+            f"event_id={event_id}, user_tg_id={user_tg_id}, hash='{security_hash[:6]}...'"
+        )
+
+        success, msg, extra = await verify_and_checkin(
+            security_hash=security_hash,
+            event_id=event_id,
+            scanner_tg_id=message.from_user.id,
+            expected_user_tg_id=user_tg_id  # BUG #2 FIX
+        )
+
+        if success:
+            await message.answer(
+                f"<b>CHECK-IN MUVAFFAQIYATLI!</b>\n\n{msg}",
+                parse_mode="HTML"
             )
 
-            success, msg, extra = await verify_and_checkin(
-                security_hash=security_hash,
-                event_id=event_id,
-                scanner_tg_id=message.from_user.id,
-                expected_user_tg_id=user_tg_id  # BUG #2 FIX
-            )
+            # BUG #8 FIX: Foydalanuvchiga alohida, tushunarli xabar yuborish
+            try:
+                if extra and extra.get('user_tg_id'):
+                    await message.bot.send_message(
+                        extra['user_tg_id'],
+                        extra['user_notify_msg'],
+                        parse_mode="HTML"
+                    )
+            except Exception as e:
+                logger.error(f"Foydalanuvchiga xabar yuborishda xatolik: {e}")
+        else:
+            await message.answer(msg, parse_mode="HTML")
 
-            if success:
-                await message.answer(
-                    f"<b>CHECK-IN MUVAFFAQIYATLI!</b>\n\n{msg}",
-                    parse_mode="HTML"
-                )
-
-                # BUG #8 FIX: Foydalanuvchiga alohida, tushunarli xabar yuborish
-                try:
-                    if extra and extra.get('user_tg_id'):
-                        await message.bot.send_message(
-                            extra['user_tg_id'],
-                            extra['user_notify_msg'],
-                            parse_mode="HTML"
-                        )
-                except Exception as e:
-                    logger.error(f"Foydalanuvchiga xabar yuborishda xatolik: {e}")
-            else:
-                await message.answer(msg, parse_mode="HTML")
-
-        except (ValueError, IndexError) as e:
-            logger.error(f"Deep link parsing xatoligi: {e}")
-            await message.answer("Noto'g'ri QR kod formati!")
-        except Exception as e:
-            logger.error(f"Check-in xatoligi: {e}")
-            await message.answer(f"Xatolik yuz berdi: {str(e)}")
+    except (ValueError, IndexError) as e:
+        logger.error(f"Deep link parsing xatoligi: {e}")
+        await message.answer("Noto'g'ri QR kod formati!")
+    except Exception as e:
+        logger.error(f"Check-in xatoligi: {e}")
+        await message.answer(f"Xatolik yuz berdi: {str(e)}")
 
 
 @scanner_router.message(Command("scan"))
