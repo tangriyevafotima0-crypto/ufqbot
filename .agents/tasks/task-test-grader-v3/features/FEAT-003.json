@@ -2,7 +2,7 @@
   "id": "FEAT-003",
   "type": "feat",
   "description": "Major rewrite of bot.py: add /roster command for auto-naming, execution-first scanning with auto-save from roster, /edit command, document/file photo support, multi-admin check, and forgiving flow when uncertain answers detected.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Completely rewrite test_grader_bot/bot.py with these major changes:",
     "",
@@ -99,5 +99,5 @@
     "cd /projects/sandbox/ufqbot && python -c \"import test_grader_bot.bot as b; import inspect; src = inspect.getsource(b._check_admin); assert 'ADMIN_IDS' in src; print('Multi-admin check OK')\""
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "Complete rewrite of bot.py (640 lines added). All verification passed: syntax check, import test, roster_command/edit_command existence, multi-admin ADMIN_IDS check, JSON corruption handling. The file uses raw string literal approach (r-strings) in generator scripts to preserve escape sequences correctly. 26 async functions and 5 regular functions total. Internal imports use simple module names (e.g., from config import ...) as designed."
 }
