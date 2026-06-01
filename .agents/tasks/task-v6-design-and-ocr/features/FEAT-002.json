@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "feat",
   "description": "Redesign sheet_generator.py layout for V6: improve title area spacing, add bordered name/surname fields, add visual separators between sections. CRITICAL: Do NOT change any constants (SHEET_WIDTH, SHEET_HEIGHT, MARKER_SIZE, MARKER_MARGIN, BUBBLE_RADIUS, BUBBLE_SPACING_X, BUBBLE_SPACING_Y, QUESTION_NUM_WIDTH, STUDENT_NUM_Y, STUDENT_NUM_BUBBLE_RADIUS, STUDENT_NUM_SPACING_X, STUDENT_NUM_SPACING_Y), corner marker positions, student number bubble positions, or answer bubble grid positions. Only change visual/text elements in areas the scanner does NOT read.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "In test_grader_bot/sheet_generator.py, update the module docstring to mention V6 and the new design improvements",
     "Redesign the title area: The title 'TEST JAVOB VARAQASI' is currently at TITLE_Y=180. This is above the NAME_Y=320 area. Add a horizontal separator line below the title to visually separate it from the name fields. You can adjust TITLE_Y (it is a local layout constant not used by the scanner) to give it more breathing room, but keep it above y=300",
@@ -27,5 +27,5 @@
     "Run: cd /projects/sandbox/ufqbot/test_grader_bot && python -c 'from sheet_generator import SHEET_WIDTH, SHEET_HEIGHT, MARKER_SIZE, MARKER_MARGIN, BUBBLE_RADIUS, BUBBLE_SPACING_X, BUBBLE_SPACING_Y, QUESTION_NUM_WIDTH, STUDENT_NUM_Y, STUDENT_NUM_BUBBLE_RADIUS, STUDENT_NUM_SPACING_X, STUDENT_NUM_SPACING_Y; assert SHEET_WIDTH==2480; assert SHEET_HEIGHT==3508; assert MARKER_SIZE==50; assert MARKER_MARGIN==60; assert BUBBLE_RADIUS==22; assert BUBBLE_SPACING_X==90; assert BUBBLE_SPACING_Y==80; assert QUESTION_NUM_WIDTH==80; assert STUDENT_NUM_Y==450; assert STUDENT_NUM_BUBBLE_RADIUS==18; assert STUDENT_NUM_SPACING_X==70; assert STUDENT_NUM_SPACING_Y==55; print(\"All constants verified\")'"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "NAME_Y constant removed since it was not imported by omr_scanner or any other file. All scanner-critical constants verified unchanged. Sheet generates without errors. Used python3.9 as documented in FEAT-001 findings."
 }
