@@ -50,12 +50,19 @@ async def register_to_event(call: CallbackQuery):
     # Auto-create user if not in DB yet
     user = await get_user_by_tg_id(call.from_user.id)
     if not user:
-        await create_user(
-            telegram_id=call.from_user.id,
-            full_name=call.from_user.full_name or "Foydalanuvchi",
-            username=call.from_user.username,
-            club_id=None
-        )
+        try:
+            await create_user(
+                telegram_id=call.from_user.id,
+                full_name=call.from_user.full_name or "Foydalanuvchi",
+                username=call.from_user.username,
+                club_id=None
+            )
+        except Exception as e:
+            logger.error(f"Auto-create user failed: {e}")
+            return await call.answer(
+                "Xatolik yuz berdi. Iltimos, avval /start bosing.",
+                show_alert=True
+            )
 
     success, msg = await register_user_for_event(call.from_user.id, event_id)
 
