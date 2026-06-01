@@ -1,7 +1,7 @@
 """
-Main Telegram bot for test grading using OMR (V5).
-Features: roster auto-naming, /edit command, document support,
-uncertain answer handling, multi-admin support.
+Main Telegram bot for test grading using OMR (V6).
+Features: roster auto-naming, OCR name detection, /edit command,
+document support, uncertain answer handling, multi-admin support.
 """
 
 import json
@@ -633,9 +633,14 @@ async def _process_scan_image(tmp_path: str, update: Update, context: ContextTyp
         if student_number:
             num_info = f" (Raqam: {student_number}, ro'yxatda yo'q)"
 
+        ocr_info = ""
+        if result.get("detected_name"):
+            ocr_info = f"\nOCR taklifi: {result['detected_name']}"
+
         await update.message.reply_text(
             f"Rasm #{idx}: {score}/{total} ({pct}%) - Ism aniqlanmadi{num_info}, /done da kiritasiz"
             f"{uncertain_info}"
+            f"{ocr_info}"
         )
 
     return BATCH_SCANNING
@@ -769,9 +774,14 @@ async def _ask_batch_name(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if uncertain:
         uncertain_info = f"\nNoaniq savollar: {', '.join(str(q) for q in uncertain)}"
 
+    ocr_info = ""
+    if result.get("detected_name"):
+        ocr_info = f"\nOCR taklifi: {result['detected_name']}"
+
     await update.message.reply_text(
         f"Rasm #{idx + 1} natijasi: {score}/{total} ({pct}%){num_info}"
-        f"{uncertain_info}\n"
+        f"{uncertain_info}"
+        f"{ocr_info}\n"
         f"O'quvchi ismini kiriting:"
     )
     return BATCH_NAMING
@@ -966,10 +976,15 @@ async def receive_scan_photo(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if uncertain:
         uncertain_info = f"Noaniq savollar: {', '.join(str(q) for q in uncertain)}\n"
 
+    ocr_info = ""
+    if result.get("detected_name"):
+        ocr_info = f"OCR taklifi: {result['detected_name']}\n"
+
     await update.message.reply_text(
         f"Natija: {score}/{total} ({percentage}%)\n"
         f"{num_info}"
         f"{uncertain_info}"
+        f"{ocr_info}"
         f"Javoblar: {answers_display}\n\n"
         f"O'quvchining ism va familiyasini kiriting\n"
         f"(masalan: Ali Valiyev):"

@@ -1,6 +1,6 @@
 """
-OMR (Optical Mark Recognition) scanner V5 - detects filled bubbles on answer sheets
-using OpenCV image processing and perspective correction.
+OMR (Optical Mark Recognition) scanner V6 - detects filled bubbles on answer sheets
+using OpenCV image processing and perspective correction, with OCR name detection.
 
 Uses a 3-method consensus voting approach:
   Method A: Relative comparison with baseline subtraction (handles printed letters)
@@ -11,6 +11,9 @@ Two out of three methods must agree for a confident detection.
 
 V5 fix: corrected perspective transform destination coordinates to use marker
 inset positions instead of page corners, fixing the 0-score bug.
+
+V6: Added best-effort OCR name detection from handwritten block capital letters
+in the name/surname fields on the answer sheet.
 """
 
 import cv2
@@ -25,6 +28,7 @@ from sheet_generator import (
     STUDENT_NUM_Y, STUDENT_NUM_BUBBLE_RADIUS,
     STUDENT_NUM_SPACING_X, STUDENT_NUM_SPACING_Y,
 )
+from name_reader import read_name_from_image
 
 # ROI size around each bubble center for analysis
 ROI_SIZE = int(BUBBLE_RADIUS * 1.5)
@@ -663,6 +667,7 @@ def scan_answer_sheet(
         "total": num_questions,
         "details": [],
         "student_number": None,
+        "detected_name": None,
         "uncertain_questions": [],
         "error": None,
     }
@@ -729,6 +734,10 @@ def scan_answer_sheet(
         cv2.THRESH_BINARY_INV, blockSize=51, C=10
     )
     _, binary_otsu = cv2.threshold(warped_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+
+    # Attempt to read handwritten name from name field
+    detected_name = read_name_from_image(warped_gray, region="name")
+    result["detected_name"] = detected_name
 
     # Detect student number if enabled
     if include_student_numbers:
