@@ -45,3 +45,6 @@ TESTS_DIR.mkdir(exist_ok=True)
 
 # Maximum number of students per session
 MAX_STUDENTS = 50
+
+# Version identifier
+VERSION = "V6"
