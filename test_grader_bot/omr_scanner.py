@@ -290,12 +290,24 @@ def _detect_corner_markers(gray: np.ndarray) -> Optional[np.ndarray]:
 
 
 def _perspective_transform(image: np.ndarray, corners: np.ndarray) -> np.ndarray:
-    """Apply perspective transform to get a flat top-down view."""
+    """Apply perspective transform to get a flat top-down view.
+
+    Maps detected marker centers to their TRUE positions on the sheet
+    (not to image corners). This ensures bubble coordinates in the warped
+    image match exactly what sheet_generator produces.
+    """
+    # Marker centers on the generated sheet (must match sheet_generator constants)
+    half = MARKER_SIZE / 2.0
+    left_x = MARKER_MARGIN + half
+    right_x = SHEET_WIDTH - MARKER_MARGIN - half
+    top_y = MARKER_MARGIN + half
+    bottom_y = SHEET_HEIGHT - MARKER_MARGIN - half
+
     dst = np.array([
-        [0, 0],
-        [SHEET_WIDTH - 1, 0],
-        [SHEET_WIDTH - 1, SHEET_HEIGHT - 1],
-        [0, SHEET_HEIGHT - 1]
+        [left_x, top_y],          # top-left marker center
+        [right_x, top_y],         # top-right marker center
+        [right_x, bottom_y],      # bottom-right marker center
+        [left_x, bottom_y],       # bottom-left marker center
     ], dtype="float32")
 
     matrix = cv2.getPerspectiveTransform(corners, dst)
