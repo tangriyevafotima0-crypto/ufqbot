@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "fix",
   "description": "Complete rewrite of omr_scanner.py to implement 3-method consensus-based bubble detection that fixes the 0-score bug, plus image preprocessing pipeline for blurry/skewed photos",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Rewrite omr_scanner.py keeping the existing _detect_corner_markers() 5-stage fallback system (it works well), _order_points(), _find_square_markers(), _select_best_four_corners(), _estimate_fourth_corner(), and _perspective_transform() functions intact",
     "Add image preprocessing pipeline at the top of scan_answer_sheet(): (1) auto-rotation detection - try 90/180/270 if corners not found, (2) sharpening via unsharp mask (cv2.GaussianBlur subtraction), (3) denoising with cv2.fastNlMeansDenoising for noisy photos, (4) keep existing CLAHE contrast enhancement",
@@ -30,5 +30,5 @@
     "cd /projects/sandbox/ufqbot/test_grader_bot && python -c 'from omr_scanner import _method_a_detect, _method_b_detect, _method_c_detect, _determine_answer; print(\"All methods exist\")'"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "Needed to install opencv-python-headless, numpy, Pillow, openpyxl, python-dotenv, python-telegram-bot via pip (pyenv python 3.11.15). All verification tests pass. The bot uses minimal RAM - just cv2/numpy loaded on demand per scan request, so it will fit well within the 300MB remaining on the 2GB server."
 }
