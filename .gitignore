@@ -1,0 +1,5 @@
+# Regenerable presentation background composites (rebuilt by create_presentation_v2.py)
+assets/bg/
+
+# Agent task tracking
+.agents/
