@@ -69,13 +69,33 @@ def extract_audio_wav(source_video, output_path):
 def transcribe_audio(wav_path, srt_path):
     """Transcribe audio using Whisper and write SRT file."""
     print("[3/6] Transcribing audio with Whisper (base model)...")
-    import whisper
+    try:
+        import whisper
+    except ImportError:
+        print("  ERROR: openai-whisper is not installed.")
+        print("  Install it with: pip install openai-whisper")
+        sys.exit(1)
 
-    model = whisper.load_model("base")
+    try:
+        model = whisper.load_model("base")
+    except Exception as e:
+        print(f"  ERROR: Failed to load Whisper model: {e}")
+        print("  This may be a network issue (model download) or a torch incompatibility.")
+        sys.exit(1)
+
     result = model.transcribe(str(wav_path), language=None)
 
     segments = result.get("segments", [])
     print(f"  Found {len(segments)} segments")
+
+    if len(segments) == 0:
+        print("  WARNING: Whisper returned 0 segments. Audio may be silent or unrecognizable.")
+        print("  Writing a minimal placeholder SRT so the video can still be built.")
+        with open(srt_path, "w", encoding="utf-8") as f:
+            f.write("1\n")
+            f.write("00:00:00,000 --> 00:00:05,000\n")
+            f.write("[No speech detected]\n\n")
+        return segments
 
     with open(srt_path, "w", encoding="utf-8") as f:
         for i, seg in enumerate(segments, 1):
@@ -682,14 +702,35 @@ def _img_sacred_geometry(seed):
 
 def get_video_duration(source_video):
     """Get duration of source video using ffprobe."""
+    import json
+
+    source_path = Path(source_video)
+    if not source_path.exists():
+        print(f"  ERROR: Source video not found: {source_video}")
+        print("  Please check that the file path is correct and the file exists.")
+        sys.exit(1)
+
     cmd = [
         FFPROBE, "-v", "quiet", "-print_format", "json",
         "-show_format", str(source_video)
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    import json
-    info = json.loads(result.stdout)
-    return float(info["format"]["duration"])
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            print(f"  ERROR: ffprobe failed (exit code {result.returncode})")
+            print(f"  stderr: {result.stderr[:500]}")
+            print("  The source video may be corrupted or unreadable.")
+            sys.exit(1)
+        info = json.loads(result.stdout)
+        return float(info["format"]["duration"])
+    except subprocess.TimeoutExpired:
+        print("  ERROR: ffprobe timed out reading the source video.")
+        sys.exit(1)
+    except (json.JSONDecodeError, KeyError, ValueError) as e:
+        print(f"  ERROR: Could not parse video duration from ffprobe output: {e}")
+        print(f"  ffprobe stdout: {result.stdout[:300]}")
+        print("  The source video may be missing duration metadata.")
+        sys.exit(1)
 
 
 def build_video_with_xfade(image_paths, audio_path, srt_path, output_path, total_duration, temp_dir):
@@ -947,20 +988,26 @@ def main():
         audio_wav = temp_path / "audio.wav"
         extract_audio_wav(SOURCE_VIDEO, audio_wav)
 
-        # Step 3: Transcribe with Whisper
-        segments = transcribe_audio(audio_wav, OUTPUT_SRT)
+        # Step 3: Transcribe with Whisper (write SRT to temp first)
+        temp_srt = temp_path / "true_self_edit.srt"
+        segments = transcribe_audio(audio_wav, temp_srt)
 
         # Step 4: Generate artistic images
         image_paths = generate_all_images(temp_path, num_images=8)
 
         # Step 5: Build final video with xfade transitions
         build_video_with_xfade(
-            image_paths, audio_aac, OUTPUT_SRT, OUTPUT_VIDEO,
+            image_paths, audio_aac, temp_srt, OUTPUT_VIDEO,
             total_duration, temp_path
         )
 
-    # Step 6: Verify
-    verify_output(OUTPUT_VIDEO)
+        # Step 6: Verify
+        verify_output(OUTPUT_VIDEO)
+
+        # Only copy SRT to final output path after video assembly succeeds
+        import shutil
+        shutil.copy2(temp_srt, OUTPUT_SRT)
+        print(f"  SRT copied to final path: {OUTPUT_SRT}")
 
     print("\n" + "=" * 60)
     print("  COMPLETE!")
