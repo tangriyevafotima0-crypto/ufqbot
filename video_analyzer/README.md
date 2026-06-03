@@ -211,7 +211,6 @@ video_analyzer/
 - Ultralytics (YOLOv8)
 - DeepFace
 - tf-keras
-- dlib
 - PyInstaller (for building EXE)
 
 ## Changelog
