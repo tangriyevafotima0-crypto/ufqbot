@@ -16,10 +16,6 @@ os.environ.setdefault("YOLO_AUTOINSTALL", "0")
 import cv2
 import numpy as np
 import mediapipe as mp
-import mediapipe.solutions
-import mediapipe.solutions.face_mesh
-import mediapipe.solutions.face_detection
-import mediapipe.solutions.pose
 from tqdm import tqdm
 
 from config import Config
@@ -139,7 +135,7 @@ def analyze_video(video_path, target_fps=None):
     face_detector = FaceDetector()
     eye_tracker = EyeTracker()
     head_pose_estimator = HeadPoseEstimator()
-    emotion_detector = EmotionDetector()
+    emotion_detector = EmotionDetector(config=cfg)
     body_pose_estimator = BodyPoseEstimator()
     action_recognizer = ActionRecognizer(sample_interval=sample_interval)
     object_detector = ObjectDetector(detection_interval=cfg.OBJECT_DETECTION_INTERVAL)
@@ -233,14 +229,10 @@ def analyze_video(video_path, target_fps=None):
                         "yaw": None, "pitch": None, "roll": None,
                     }
 
-                # Emotion detection (only when faces detected)
+                # Emotion detection (uses shared face mesh landmarks)
+                # Note: processes only the primary face (shared FaceMesh max_num_faces=1)
                 try:
-                    faces = frame_results["face_detection"].get("faces", [])
-                    if faces:
-                        bboxes = [f["bbox"] for f in faces]
-                        emotion_result = emotion_detector.analyze_frame(frame, bboxes)
-                    else:
-                        emotion_result = {"emotions": [], "dominant_emotion": None}
+                    emotion_result = emotion_detector.analyze_frame(face_mesh_landmarks)
                     frame_results["emotions"] = emotion_result
                 except Exception:
                     error_counts["emotions"] += 1
