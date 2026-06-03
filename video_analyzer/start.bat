@@ -23,7 +23,7 @@ if exist ".venv\Scripts\python.exe" (
     call .venv\Scripts\activate.bat
 
     :: Check if dependencies need updating (version.json vs install_info.json)
-    python -c "import json, sys; v=json.load(open('version.json'))['version']; i=json.load(open('install_info.json'))['version'] if __import__('os').path.exists('install_info.json') else ''; sys.exit(0 if v==i else 1)"
+    python -c "import json,sys,os;exec(\"try:\\n v=json.load(open('version.json'))['version']\\n i=json.load(open('install_info.json'))['version'] if os.path.exists('install_info.json') else ''\\n sys.exit(0 if v==i else 1)\\nexcept Exception:\\n sys.exit(1)\")"
     if %ERRORLEVEL% neq 0 (
         echo  Update detected - refreshing dependencies...
         pip install -r requirements.txt --quiet

@@ -32,7 +32,7 @@ echo.
 :: Step 2: Install/upgrade PyInstaller
 :: ---------------------------------------------------------------
 echo [2/5] Installing/upgrading PyInstaller...
-pip install --upgrade pyinstaller --quiet
+pip install -r requirements-dev.txt --quiet
 if %ERRORLEVEL% neq 0 (
     echo  ERROR: Failed to install PyInstaller.
     pause

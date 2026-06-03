@@ -11,6 +11,8 @@ import time
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
+os.environ.setdefault("YOLO_AUTOINSTALL", "0")
+
 import cv2
 import numpy as np
 import mediapipe as mp
@@ -334,7 +336,7 @@ def analyze_video(video_path, target_fps=None):
 
 def main():
     """Main entry point."""
-    print("Video Analyzer v1.0")
+    print(f"Video Analyzer v{Config().VERSION}")
     print("Select a video file to analyze...\n")
 
     video_path = select_video_file()

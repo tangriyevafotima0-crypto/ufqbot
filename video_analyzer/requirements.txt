@@ -7,4 +7,3 @@ Pillow>=9.5.0
 ultralytics>=8.0.0,<8.4.0
 deepface>=0.0.79,<0.0.90
 tf-keras>=2.16.0,<2.18.0
-pyinstaller>=5.13.0
