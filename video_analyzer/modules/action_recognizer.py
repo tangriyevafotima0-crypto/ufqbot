@@ -1,0 +1,153 @@
+"""Action recognition module using body pose keypoints."""
+
+import numpy as np
+
+
+class ActionRecognizer:
+    """Classifies actions from body pose data using geometric rules."""
+
+    def __init__(self):
+        self._prev_landmarks = None
+        self._prev_actions = []
+
+    def analyze_frame(self, pose_landmarks):
+        """Classify action based on body pose landmarks.
+
+        Args:
+            pose_landmarks: dict mapping landmark names to {x, y, z, visibility}
+                           (from BodyPoseEstimator)
+
+        Returns:
+            dict with keys:
+                - actions: list of detected action strings
+                - primary_action: most likely single action
+                - details: dict with computed angles/values
+        """
+        if pose_landmarks is None:
+            self._prev_landmarks = None
+            return {"actions": [], "primary_action": "unknown", "details": {}}
+
+        actions = []
+        details = {}
+
+        # Compute knee angles for sitting/standing detection
+        left_knee_angle = self._compute_angle(
+            pose_landmarks.get("left_hip"),
+            pose_landmarks.get("left_knee"),
+            pose_landmarks.get("left_ankle"),
+        )
+        right_knee_angle = self._compute_angle(
+            pose_landmarks.get("right_hip"),
+            pose_landmarks.get("right_knee"),
+            pose_landmarks.get("right_ankle"),
+        )
+
+        details["left_knee_angle"] = left_knee_angle
+        details["right_knee_angle"] = right_knee_angle
+
+        avg_knee_angle = None
+        if left_knee_angle is not None and right_knee_angle is not None:
+            avg_knee_angle = (left_knee_angle + right_knee_angle) / 2
+        elif left_knee_angle is not None:
+            avg_knee_angle = left_knee_angle
+        elif right_knee_angle is not None:
+            avg_knee_angle = right_knee_angle
+
+        # Sitting: knee angle < 120 degrees
+        if avg_knee_angle is not None and avg_knee_angle < 120:
+            actions.append("sitting")
+        # Standing: knee angle > 160 degrees
+        elif avg_knee_angle is not None and avg_knee_angle > 160:
+            actions.append("standing")
+
+        # Hand raising: wrist above shoulder
+        left_wrist = pose_landmarks.get("left_wrist")
+        left_shoulder = pose_landmarks.get("left_shoulder")
+        right_wrist = pose_landmarks.get("right_wrist")
+        right_shoulder = pose_landmarks.get("right_shoulder")
+
+        if left_wrist and left_shoulder:
+            if left_wrist["y"] < left_shoulder["y"] - 0.05:
+                actions.append("hand_raising_left")
+        if right_wrist and right_shoulder:
+            if right_wrist["y"] < right_shoulder["y"] - 0.05:
+                actions.append("hand_raising_right")
+
+        # Walking: detect alternating leg positions between frames
+        if self._prev_landmarks is not None:
+            left_ankle_curr = pose_landmarks.get("left_ankle")
+            right_ankle_curr = pose_landmarks.get("right_ankle")
+            left_ankle_prev = self._prev_landmarks.get("left_ankle")
+            right_ankle_prev = self._prev_landmarks.get("right_ankle")
+
+            if all([left_ankle_curr, right_ankle_curr, left_ankle_prev, right_ankle_prev]):
+                left_movement = abs(left_ankle_curr["x"] - left_ankle_prev["x"])
+                right_movement = abs(right_ankle_curr["x"] - right_ankle_prev["x"])
+                if left_movement > 0.02 or right_movement > 0.02:
+                    if "standing" in actions:
+                        actions.remove("standing")
+                    actions.append("walking")
+
+        # Writing: hand near table level with small movements
+        if left_wrist and left_shoulder:
+            left_hip = pose_landmarks.get("left_hip")
+            if left_hip:
+                if left_wrist["y"] > left_shoulder["y"] and left_wrist["y"] < left_hip["y"]:
+                    if self._prev_landmarks:
+                        prev_left_wrist = self._prev_landmarks.get("left_wrist")
+                        if prev_left_wrist:
+                            movement = np.sqrt(
+                                (left_wrist["x"] - prev_left_wrist["x"])**2 +
+                                (left_wrist["y"] - prev_left_wrist["y"])**2
+                            )
+                            if 0.005 < movement < 0.03:
+                                actions.append("writing")
+
+        self._prev_landmarks = pose_landmarks
+
+        # Determine primary action
+        priority = ["walking", "hand_raising_left", "hand_raising_right",
+                    "writing", "sitting", "standing"]
+        primary_action = "unknown"
+        for action in priority:
+            if action in actions:
+                primary_action = action
+                break
+
+        return {
+            "actions": actions,
+            "primary_action": primary_action,
+            "details": details,
+        }
+
+    def _compute_angle(self, point_a, point_b, point_c):
+        """Compute angle at point_b formed by points a-b-c.
+
+        Returns angle in degrees, or None if any point is missing.
+        """
+        if not all([point_a, point_b, point_c]):
+            return None
+
+        a = np.array([point_a["x"], point_a["y"]])
+        b = np.array([point_b["x"], point_b["y"]])
+        c = np.array([point_c["x"], point_c["y"]])
+
+        ba = a - b
+        bc = c - b
+
+        cosine = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc) + 1e-6)
+        cosine = np.clip(cosine, -1.0, 1.0)
+        angle = np.degrees(np.arccos(cosine))
+
+        return float(angle)
+
+    def close(self):
+        """Release resources."""
+        self._prev_landmarks = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
