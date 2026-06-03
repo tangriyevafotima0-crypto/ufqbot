@@ -25,10 +25,11 @@ class ObjectDetector:
 
         Returns:
             dict with keys:
-                - objects: list of dicts with class_name, bbox, confidence
+                - objects: list of dicts with class_name, bbox (normalized 0-1), confidence
                 - object_count: total number of objects detected
         """
         model = self._get_model()
+        h, w = frame.shape[:2]
         results = model(frame, verbose=False, conf=self._confidence_threshold)
 
         objects = []
@@ -45,13 +46,14 @@ class ObjectDetector:
 
                     class_name = result.names.get(cls_id, f"class_{cls_id}")
 
+                    # Normalize bbox coordinates to [0,1] range
                     objects.append({
                         "class_name": class_name,
                         "bbox": {
-                            "x1": float(xyxy[0]),
-                            "y1": float(xyxy[1]),
-                            "x2": float(xyxy[2]),
-                            "y2": float(xyxy[3]),
+                            "x1": float(xyxy[0]) / w,
+                            "y1": float(xyxy[1]) / h,
+                            "x2": float(xyxy[2]) / w,
+                            "y2": float(xyxy[3]) / h,
                         },
                         "confidence": confidence,
                     })

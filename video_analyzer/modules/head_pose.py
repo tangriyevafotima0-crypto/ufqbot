@@ -2,7 +2,6 @@
 
 import numpy as np
 import cv2
-import mediapipe as mp
 
 
 class HeadPoseEstimator:
@@ -27,19 +26,17 @@ class HeadPoseEstimator:
     ], dtype=np.float64)
 
     def __init__(self):
-        self.mp_face_mesh = mp.solutions.face_mesh
-        self.face_mesh = self.mp_face_mesh.FaceMesh(
-            max_num_faces=1,
-            refine_landmarks=False,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5,
-        )
+        # No longer creates its own FaceMesh instance.
+        # Landmarks are provided externally via analyze_frame.
+        pass
 
-    def analyze_frame(self, frame):
+    def analyze_frame(self, frame, face_mesh_landmarks=None):
         """Estimate head pose angles.
 
         Args:
             frame: BGR image (numpy array)
+            face_mesh_landmarks: pre-computed FaceMesh landmarks list from
+                a shared FaceMesh instance. If None, returns empty result.
 
         Returns:
             dict with keys:
@@ -49,14 +46,11 @@ class HeadPoseEstimator:
                 - landmarks_2d: the 6 key landmark positions used
         """
         h, w, _ = frame.shape
-        rgb_frame = frame[:, :, ::-1]
-        results = self.face_mesh.process(rgb_frame)
 
-        if not results.multi_face_landmarks:
+        if face_mesh_landmarks is None:
             return {"yaw": None, "pitch": None, "roll": None, "landmarks_2d": None}
 
-        face_landmarks = results.multi_face_landmarks[0]
-        landmarks = face_landmarks.landmark
+        landmarks = face_mesh_landmarks
 
         # Get 2D image points
         landmark_indices = [
@@ -109,7 +103,7 @@ class HeadPoseEstimator:
 
     def close(self):
         """Release resources."""
-        self.face_mesh.close()
+        pass
 
     def __enter__(self):
         return self

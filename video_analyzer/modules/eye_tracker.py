@@ -21,19 +21,17 @@ class EyeTracker:
     CAMERA_LOOK_THRESHOLD = 0.15
 
     def __init__(self):
-        self.mp_face_mesh = mp.solutions.face_mesh
-        self.face_mesh = self.mp_face_mesh.FaceMesh(
-            max_num_faces=1,
-            refine_landmarks=True,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5,
-        )
+        # No longer creates its own FaceMesh instance.
+        # Landmarks are provided externally via analyze_frame.
+        pass
 
-    def analyze_frame(self, frame):
+    def analyze_frame(self, frame, face_mesh_landmarks=None):
         """Analyze eye gaze in a frame.
 
         Args:
             frame: BGR image (numpy array)
+            face_mesh_landmarks: pre-computed FaceMesh landmarks list from
+                a shared FaceMesh instance. If None, returns empty result.
 
         Returns:
             dict with keys:
@@ -42,10 +40,7 @@ class EyeTracker:
                 - looking_at_camera: bool
                 - iris_landmarks: dict with left/right iris centers
         """
-        rgb_frame = frame[:, :, ::-1]
-        results = self.face_mesh.process(rgb_frame)
-
-        if not results.multi_face_landmarks:
+        if face_mesh_landmarks is None:
             return {
                 "gaze_x": None,
                 "gaze_y": None,
@@ -53,8 +48,7 @@ class EyeTracker:
                 "iris_landmarks": None,
             }
 
-        face_landmarks = results.multi_face_landmarks[0]
-        landmarks = face_landmarks.landmark
+        landmarks = face_mesh_landmarks
 
         # Get iris centers
         left_iris_center = self._get_landmark_center(landmarks, self.LEFT_IRIS)
@@ -101,7 +95,7 @@ class EyeTracker:
 
     def close(self):
         """Release resources."""
-        self.face_mesh.close()
+        pass
 
     def __enter__(self):
         return self

@@ -45,6 +45,13 @@ class VideoAnnotator:
         self.height = height
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         self.writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+        self.writer_active = self.writer.isOpened()
+        if not self.writer_active:
+            print(
+                f"WARNING: VideoWriter failed to open '{output_path}'. "
+                "Annotated video will not be written. "
+                "Check codec availability (mp4v) and output path permissions."
+            )
 
     def annotate_and_write(self, frame, frame_results):
         """Draw annotations on frame and write to output video.
@@ -138,10 +145,10 @@ class VideoAnnotator:
         obj_data = frame_results.get("objects", {})
         for obj in obj_data.get("objects", []):
             bbox = obj.get("bbox", {})
-            x1 = int(bbox.get("x1", 0))
-            y1 = int(bbox.get("y1", 0))
-            x2 = int(bbox.get("x2", 0))
-            y2 = int(bbox.get("y2", 0))
+            x1 = int(bbox.get("x1", 0) * self.width)
+            y1 = int(bbox.get("y1", 0) * self.height)
+            x2 = int(bbox.get("x2", 0) * self.width)
+            y2 = int(bbox.get("y2", 0) * self.height)
             label = f"{obj.get('class_name', '')} {obj.get('confidence', 0):.2f}"
             cv2.rectangle(annotated, (x1, y1), (x2, y2), self.COLOR_OBJECT, 2)
             cv2.putText(
@@ -150,7 +157,8 @@ class VideoAnnotator:
             )
 
         # Write annotated frame
-        self.writer.write(annotated)
+        if self.writer_active:
+            self.writer.write(annotated)
 
     def close(self):
         """Release video writer resources."""

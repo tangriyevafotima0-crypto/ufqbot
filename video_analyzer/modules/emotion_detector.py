@@ -14,8 +14,24 @@ class EmotionDetector:
 
     def _get_deepface(self):
         if self._deepface is None:
-            from deepface import DeepFace
-            self._deepface = DeepFace
+            print(
+                "INFO: Loading DeepFace emotion model. "
+                "First run may download model files (~100MB)..."
+            )
+            try:
+                from deepface import DeepFace
+                self._deepface = DeepFace
+            except ImportError as e:
+                raise RuntimeError(
+                    "DeepFace is not installed. Install it with: "
+                    "pip install deepface"
+                ) from e
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to load DeepFace: {e}. "
+                    "Check your internet connection for model download "
+                    "or verify the installation with: pip install deepface"
+                ) from e
         return self._deepface
 
     def analyze_frame(self, frame, face_bboxes=None):

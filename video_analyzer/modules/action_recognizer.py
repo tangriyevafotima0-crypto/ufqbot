@@ -6,9 +6,27 @@ import numpy as np
 class ActionRecognizer:
     """Classifies actions from body pose data using geometric rules."""
 
-    def __init__(self):
+    # Base thresholds (calibrated for consecutive frames at ~30fps)
+    BASE_WALKING_THRESHOLD = 0.02
+    BASE_WRITING_MIN_THRESHOLD = 0.005
+    BASE_WRITING_MAX_THRESHOLD = 0.03
+
+    def __init__(self, sample_interval=1):
+        """Initialize action recognizer.
+
+        Args:
+            sample_interval: number of source frames between analyzed frames.
+                Thresholds are scaled by this value to account for larger
+                inter-frame deltas at lower sampling rates.
+        """
         self._prev_landmarks = None
         self._prev_actions = []
+        self._sample_interval = max(1, sample_interval)
+
+        # Scale thresholds proportionally to sample interval
+        self._walking_threshold = self.BASE_WALKING_THRESHOLD * self._sample_interval
+        self._writing_min_threshold = self.BASE_WRITING_MIN_THRESHOLD * self._sample_interval
+        self._writing_max_threshold = self.BASE_WRITING_MAX_THRESHOLD * self._sample_interval
 
     def analyze_frame(self, pose_landmarks):
         """Classify action based on body pose landmarks.
@@ -83,7 +101,7 @@ class ActionRecognizer:
             if all([left_ankle_curr, right_ankle_curr, left_ankle_prev, right_ankle_prev]):
                 left_movement = abs(left_ankle_curr["x"] - left_ankle_prev["x"])
                 right_movement = abs(right_ankle_curr["x"] - right_ankle_prev["x"])
-                if left_movement > 0.02 or right_movement > 0.02:
+                if left_movement > self._walking_threshold or right_movement > self._walking_threshold:
                     if "standing" in actions:
                         actions.remove("standing")
                     actions.append("walking")
@@ -100,7 +118,7 @@ class ActionRecognizer:
                                 (left_wrist["x"] - prev_left_wrist["x"])**2 +
                                 (left_wrist["y"] - prev_left_wrist["y"])**2
                             )
-                            if 0.005 < movement < 0.03:
+                            if self._writing_min_threshold < movement < self._writing_max_threshold:
                                 actions.append("writing")
 
         self._prev_landmarks = pose_landmarks
