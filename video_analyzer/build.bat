@@ -58,7 +58,19 @@ echo.
 :: Step 4: Run PyInstaller
 :: ---------------------------------------------------------------
 echo [4/5] Building executable (this may take a few minutes)...
-pyinstaller --onefile --windowed --name VideoAnalyzer --add-data "version.json;." main.py
+echo  Setting POLARS_SKIP_CPU_CHECK=1 to prevent AVX/AVX2 crash...
+set POLARS_SKIP_CPU_CHECK=1
+pyinstaller --onedir --windowed --name VideoAnalyzer ^
+    --add-data "version.json;." ^
+    --exclude-module polars ^
+    --exclude-module tensorboard ^
+    --exclude-module IPython ^
+    --exclude-module jupyter ^
+    --exclude-module notebook ^
+    --exclude-module pytest ^
+    --collect-all mediapipe ^
+    --collect-all ultralytics ^
+    main.py
 if %ERRORLEVEL% neq 0 (
     echo.
     echo  ERROR: PyInstaller build failed.
@@ -73,13 +85,13 @@ echo.
 :: Step 5: Copy version.json to dist and show result
 :: ---------------------------------------------------------------
 echo [5/5] Finalizing...
-copy version.json dist\version.json >nul 2>&1
-echo  Copied version.json to dist/
+copy version.json dist\VideoAnalyzer\version.json >nul 2>&1
+echo  Copied version.json to dist/VideoAnalyzer/
 echo.
 
 :: Show file size
-if exist "dist\VideoAnalyzer.exe" (
-    for %%A in ("dist\VideoAnalyzer.exe") do (
+if exist "dist\VideoAnalyzer\VideoAnalyzer.exe" (
+    for %%A in ("dist\VideoAnalyzer\VideoAnalyzer.exe") do (
         set SIZE=%%~zA
         set /a SIZE_MB=!SIZE! / 1048576
     )
@@ -87,11 +99,15 @@ if exist "dist\VideoAnalyzer.exe" (
     echo  =  BUILD COMPLETE                                          =
     echo  ============================================================
     echo.
-    echo  Output: dist\VideoAnalyzer.exe
+    echo  Output: dist\VideoAnalyzer\VideoAnalyzer.exe
     echo  Size:   ~!SIZE_MB! MB
     echo.
+    echo  NOTE: The dist\VideoAnalyzer\ folder contains all files
+    echo        needed to run the application. Distribute the entire
+    echo        folder, not just the .exe file.
+    echo.
 ) else (
-    echo  WARNING: Expected output file not found at dist\VideoAnalyzer.exe
+    echo  WARNING: Expected output file not found at dist\VideoAnalyzer\VideoAnalyzer.exe
 )
 
 pause
