@@ -10,6 +10,7 @@ Usage:
     python check_update.py --force  # Always run pip install
 """
 
+import datetime
 import json
 import os
 import subprocess
@@ -71,10 +72,12 @@ def main():
             print("  [check_update] WARNING: pip install had issues, but continuing.")
             if result.stderr:
                 print(f"  {result.stderr.strip()[:200]}")
+            # Do NOT update install_info.json on failure so it retries next launch
+            return
         else:
             print("  [check_update] Dependencies updated successfully.")
 
-        # Write/update install_info.json
+        # Write/update install_info.json only after successful pip install
         install_data = {}
         if os.path.exists(install_info_path):
             try:
@@ -84,6 +87,9 @@ def main():
                 install_data = {}
 
         install_data["version"] = current_version
+        install_data["install_date"] = datetime.datetime.now().isoformat()
+        install_data["python_path"] = sys.executable
+        install_data["install_dir"] = os.path.abspath(script_dir)
         with open(install_info_path, "w", encoding="utf-8") as f:
             json.dump(install_data, f, indent=2)
 

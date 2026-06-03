@@ -116,11 +116,11 @@ class UpdateChecker:
                 # No releases exist yet - this is not an error
                 pass
             else:
-                # Other HTTP errors - soft warning, not scary
-                result["error"] = None
+                # Other HTTP errors - preserve a brief message for callers
+                result["error"] = f"HTTP {e.code}"
         except urllib.error.URLError:
-            # Network unreachable - soft handling
-            result["error"] = None
+            # Network unreachable - soft handling with brief message
+            result["error"] = "Network unavailable"
         except Exception:
             # Any other error - never raise, just return safe default
             pass

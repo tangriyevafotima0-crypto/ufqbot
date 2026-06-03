@@ -126,14 +126,14 @@ echo.
 :: Step 7: Pre-download DeepFace model
 :: ---------------------------------------------------------------
 echo [7/7] Downloading emotion detection model...
-python -c "from deepface import DeepFace; print('  DeepFace model loaded.')"
+python -c "from deepface import DeepFace; DeepFace.build_model('Emotion'); print('  Emotion model ready.')"
 echo  Emotion model download attempted.
 echo.
 
 :: ---------------------------------------------------------------
 :: Write install_info.json
 :: ---------------------------------------------------------------
-python -c "import json, sys, os, datetime; info = {'install_date': datetime.datetime.now().isoformat(), 'version': json.load(open('version.json'))['version'], 'python_path': sys.executable, 'install_dir': os.path.abspath('.')}; json.dump(info, open('install_info.json', 'w'), indent=2); print('  Install info saved.')"
+python check_update.py --force
 
 echo.
 echo  ============================================================
