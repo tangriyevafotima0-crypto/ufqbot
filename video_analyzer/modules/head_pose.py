@@ -90,9 +90,9 @@ class HeadPoseEstimator:
         proj_matrix = np.hstack((rotation_matrix, translation_vector))
         euler_angles = cv2.decomposeProjectionMatrix(proj_matrix)[6]
 
-        pitch = float(euler_angles[0][0])
-        yaw = float(euler_angles[1][0])
-        roll = float(euler_angles[2][0])
+        pitch = self._normalize_angle(float(euler_angles[0][0]))
+        yaw = self._normalize_angle(float(euler_angles[1][0]))
+        roll = self._normalize_angle(float(euler_angles[2][0]))
 
         return {
             "yaw": yaw,
@@ -100,6 +100,15 @@ class HeadPoseEstimator:
             "roll": roll,
             "landmarks_2d": image_points.tolist(),
         }
+
+    @staticmethod
+    def _normalize_angle(angle):
+        """Normalize angle to [-180, 180] range to prevent gimbal lock flipping."""
+        while angle > 180:
+            angle -= 360
+        while angle < -180:
+            angle += 360
+        return angle
 
     def close(self):
         """Release resources."""

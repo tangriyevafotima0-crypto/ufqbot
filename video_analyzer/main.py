@@ -132,7 +132,7 @@ def analyze_video(video_path, target_fps=2.5):
     emotion_detector = EmotionDetector()
     body_pose_estimator = BodyPoseEstimator()
     action_recognizer = ActionRecognizer(sample_interval=sample_interval)
-    object_detector = ObjectDetector()
+    object_detector = ObjectDetector(detection_interval=3)
 
     # Shared FaceMesh instance (refine_landmarks=True is the superset
     # needed by EyeTracker for iris landmarks; HeadPoseEstimator uses
@@ -182,10 +182,12 @@ def analyze_video(video_path, target_fps=2.5):
 
                 frame_results = {"timestamp": timestamp, "frame_index": frame_idx}
 
+                # Convert to RGB once for all modules that need it
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
                 # Run shared FaceMesh once for both eye_tracker and head_pose
                 face_mesh_landmarks = None
                 try:
-                    rgb_frame = frame[:, :, ::-1]
                     mesh_results = shared_face_mesh.process(rgb_frame)
                     if mesh_results.multi_face_landmarks:
                         face_mesh_landmarks = mesh_results.multi_face_landmarks[0].landmark
@@ -194,7 +196,7 @@ def analyze_video(video_path, target_fps=2.5):
 
                 # Face detection
                 try:
-                    face_result = face_detector.analyze_frame(frame)
+                    face_result = face_detector.analyze_frame(frame, rgb_frame=rgb_frame)
                     frame_results["face_detection"] = face_result
                 except Exception:
                     error_counts["face_detection"] += 1
@@ -236,7 +238,7 @@ def analyze_video(video_path, target_fps=2.5):
 
                 # Body pose estimation
                 try:
-                    pose_result = body_pose_estimator.analyze_frame(frame)
+                    pose_result = body_pose_estimator.analyze_frame(frame, rgb_frame=rgb_frame)
                     frame_results["body_pose"] = pose_result
                 except Exception:
                     error_counts["body_pose"] += 1

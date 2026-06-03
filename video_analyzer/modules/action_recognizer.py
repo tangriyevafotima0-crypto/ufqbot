@@ -22,6 +22,7 @@ class ActionRecognizer:
         self._prev_landmarks = None
         self._prev_actions = []
         self._sample_interval = max(1, sample_interval)
+        self._writing_frame_count = 0
 
         # Scale thresholds proportionally to sample interval
         self._walking_threshold = self.BASE_WALKING_THRESHOLD * self._sample_interval
@@ -91,22 +92,25 @@ class ActionRecognizer:
             if right_wrist["y"] < right_shoulder["y"] - 0.05:
                 actions.append("hand_raising_right")
 
-        # Walking: detect alternating leg positions between frames
+        # Walking: detect hip displacement between frames (more stable than ankles)
         if self._prev_landmarks is not None:
-            left_ankle_curr = pose_landmarks.get("left_ankle")
-            right_ankle_curr = pose_landmarks.get("right_ankle")
-            left_ankle_prev = self._prev_landmarks.get("left_ankle")
-            right_ankle_prev = self._prev_landmarks.get("right_ankle")
+            left_hip_curr = pose_landmarks.get("left_hip")
+            right_hip_curr = pose_landmarks.get("right_hip")
+            left_hip_prev = self._prev_landmarks.get("left_hip")
+            right_hip_prev = self._prev_landmarks.get("right_hip")
 
-            if all([left_ankle_curr, right_ankle_curr, left_ankle_prev, right_ankle_prev]):
-                left_movement = abs(left_ankle_curr["x"] - left_ankle_prev["x"])
-                right_movement = abs(right_ankle_curr["x"] - right_ankle_prev["x"])
-                if left_movement > self._walking_threshold or right_movement > self._walking_threshold:
+            if all([left_hip_curr, right_hip_curr, left_hip_prev, right_hip_prev]):
+                left_movement = abs(left_hip_curr["x"] - left_hip_prev["x"])
+                right_movement = abs(right_hip_curr["x"] - right_hip_prev["x"])
+                avg_hip_movement = (left_movement + right_movement) / 2
+                if avg_hip_movement > self._walking_threshold:
                     if "standing" in actions:
                         actions.remove("standing")
                     actions.append("walking")
 
         # Writing: hand near table level with small movements
+        # Require writing condition for 2+ consecutive frames to reduce false positives
+        writing_detected = False
         if left_wrist and left_shoulder:
             left_hip = pose_landmarks.get("left_hip")
             if left_hip:
@@ -119,7 +123,14 @@ class ActionRecognizer:
                                 (left_wrist["y"] - prev_left_wrist["y"])**2
                             )
                             if self._writing_min_threshold < movement < self._writing_max_threshold:
-                                actions.append("writing")
+                                writing_detected = True
+
+        if writing_detected:
+            self._writing_frame_count += 1
+            if self._writing_frame_count >= 2:
+                actions.append("writing")
+        else:
+            self._writing_frame_count = 0
 
         self._prev_landmarks = pose_landmarks
 

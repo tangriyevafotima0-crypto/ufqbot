@@ -61,12 +61,24 @@ class EmotionDetector:
             bw = int(bbox["w"] * w)
             bh = int(bbox["h"] * h)
 
+            # Clamp coordinates to non-negative values
+            x = max(0, x)
+            y = max(0, y)
+
             # Add padding
             pad = 20
             x1 = max(0, x - pad)
             y1 = max(0, y - pad)
             x2 = min(w, x + bw + pad)
             y2 = min(h, y + bh + pad)
+
+            # Validate crop has positive dimensions
+            if x2 <= x1 or y2 <= y1:
+                emotions_list.append({
+                    "scores": {},
+                    "dominant": "unknown",
+                })
+                continue
 
             face_crop = frame[y1:y2, x1:x2]
 

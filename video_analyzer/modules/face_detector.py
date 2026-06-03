@@ -13,18 +13,21 @@ class FaceDetector:
             min_detection_confidence=min_detection_confidence
         )
 
-    def analyze_frame(self, frame):
+    def analyze_frame(self, frame, rgb_frame=None):
         """Detect faces in a frame.
 
         Args:
             frame: BGR image (numpy array)
+            rgb_frame: optional pre-converted RGB image. If provided, used
+                directly instead of converting from BGR.
 
         Returns:
             dict with keys:
                 - faces: list of dicts with 'bbox' (x, y, w, h normalized)
                 - face_count: number of faces detected
         """
-        rgb_frame = frame[:, :, ::-1]
+        if rgb_frame is None:
+            rgb_frame = frame[:, :, ::-1]
         results = self.face_detection.process(rgb_frame)
 
         faces = []

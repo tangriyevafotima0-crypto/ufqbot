@@ -29,18 +29,21 @@ class BodyPoseEstimator:
             min_tracking_confidence=0.5,
         )
 
-    def analyze_frame(self, frame):
+    def analyze_frame(self, frame, rgb_frame=None):
         """Estimate body pose in a frame.
 
         Args:
             frame: BGR image (numpy array)
+            rgb_frame: optional pre-converted RGB image. If provided, used
+                directly instead of converting from BGR.
 
         Returns:
             dict with keys:
                 - landmarks: dict mapping landmark name to (x, y, z, visibility)
                 - detected: bool indicating if a body was found
         """
-        rgb_frame = frame[:, :, ::-1]
+        if rgb_frame is None:
+            rgb_frame = frame[:, :, ::-1]
         results = self.pose.process(rgb_frame)
 
         if not results.pose_landmarks:

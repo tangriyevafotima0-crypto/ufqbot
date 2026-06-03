@@ -156,6 +156,19 @@ class VideoAnnotator:
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.COLOR_OBJECT, 1,
             )
 
+        # Draw camera look indicator (green circle + text at top-right)
+        eye_data = frame_results.get("eye_tracking", {})
+        if eye_data.get("looking_at_camera"):
+            cv2.circle(
+                annotated, (self.width - 30, 30), 15,
+                self.COLOR_FACE, -1,  # COLOR_FACE is green, -1 = filled
+            )
+            cv2.putText(
+                annotated, "LOOKING AT CAMERA",
+                (self.width - 220, 35),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.COLOR_FACE, 2,
+            )
+
         # Write annotated frame
         if self.writer_active:
             self.writer.write(annotated)

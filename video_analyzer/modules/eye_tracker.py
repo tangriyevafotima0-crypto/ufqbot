@@ -17,8 +17,10 @@ class EyeTracker:
     RIGHT_EYE_INNER = 362
     RIGHT_EYE_OUTER = 263
 
-    # Threshold for "looking at camera" (normalized distance from center)
-    CAMERA_LOOK_THRESHOLD = 0.15
+    # Separate thresholds for "looking at camera" (eye is wider than tall,
+    # so horizontal tolerance should be larger than vertical)
+    CAMERA_LOOK_THRESHOLD_X = 0.18
+    CAMERA_LOOK_THRESHOLD_Y = 0.12
 
     def __init__(self):
         # No longer creates its own FaceMesh instance.
@@ -75,8 +77,11 @@ class EyeTracker:
         gaze_y = float((left_gaze[1] + right_gaze[1]) / 2)
 
         # Check if looking at camera (iris centered in eye)
-        gaze_magnitude = np.sqrt(gaze_x**2 + gaze_y**2)
-        looking_at_camera = gaze_magnitude < self.CAMERA_LOOK_THRESHOLD
+        # Use separate x/y thresholds instead of magnitude
+        looking_at_camera = (
+            abs(gaze_x) < self.CAMERA_LOOK_THRESHOLD_X
+            and abs(gaze_y) < self.CAMERA_LOOK_THRESHOLD_Y
+        )
 
         return {
             "gaze_x": gaze_x,

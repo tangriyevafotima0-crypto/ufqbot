@@ -44,12 +44,22 @@ class ReportGenerator:
 
     def _generate_json_report(self, results, video_info):
         """Generate JSON report with all numerical data."""
+        frame_data = results.get("frame_data", [])
+
         report = {
             "video_info": video_info,
             "summary": self._compute_summary(results),
-            "frame_data": results.get("frame_data", []),
             "statistics": results.get("statistics", {}),
         }
+
+        # Compact mode: omit per-frame data when frame count is very large
+        if len(frame_data) > 3000:
+            report["frame_data_note"] = (
+                f"Per-frame data omitted (compact mode): {len(frame_data)} frames. "
+                "Use the full analysis pipeline for detailed per-frame data."
+            )
+        else:
+            report["frame_data"] = frame_data
 
         path = os.path.join(self.output_dir, "analysis_report.json")
         with open(path, "w", encoding="utf-8") as f:
@@ -84,7 +94,8 @@ class ReportGenerator:
 
             # Eye gaze summary
             f.write("--- EYE GAZE TRACKING ---\n")
-            f.write(f"Camera look events: {summary.get('camera_look_count', 0)}\n")
+            f.write(f"Camera look events (distinct): {summary.get('camera_look_events', 0)}\n")
+            f.write(f"Camera look frames: {summary.get('camera_look_count', 0)}\n")
             f.write(f"Camera look percentage: {summary.get('camera_look_percentage', 0):.1f}%\n\n")
 
             # Head pose summary
@@ -277,6 +288,13 @@ class ReportGenerator:
         summary["camera_look_percentage"] = (
             sum(camera_looks) / len(camera_looks) * 100 if camera_looks else 0
         )
+
+        # Count distinct camera look events (transitions from False -> True)
+        camera_look_events = 0
+        for i in range(len(camera_looks)):
+            if camera_looks[i] and (i == 0 or not camera_looks[i - 1]):
+                camera_look_events += 1
+        summary["camera_look_events"] = camera_look_events
 
         # Head pose stats
         yaws = [fd.get("head_pose", {}).get("yaw") for fd in frame_data]

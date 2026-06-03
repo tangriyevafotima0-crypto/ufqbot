@@ -6,10 +6,13 @@ import numpy as np
 class ObjectDetector:
     """Detects objects in frames using YOLOv8 (ultralytics)."""
 
-    def __init__(self, model_name="yolov8n.pt", confidence_threshold=0.5):
+    def __init__(self, model_name="yolov8n.pt", confidence_threshold=0.5, detection_interval=1):
         self._model = None
         self._model_name = model_name
         self._confidence_threshold = confidence_threshold
+        self._detection_interval = max(1, detection_interval)
+        self._call_count = 0
+        self._cached_result = {"objects": [], "object_count": 0}
 
     def _get_model(self):
         if self._model is None:
@@ -28,6 +31,11 @@ class ObjectDetector:
                 - objects: list of dicts with class_name, bbox (normalized 0-1), confidence
                 - object_count: total number of objects detected
         """
+        # Only run YOLO every Nth call; return cached result otherwise
+        self._call_count += 1
+        if self._detection_interval > 1 and (self._call_count - 1) % self._detection_interval != 0:
+            return self._cached_result
+
         model = self._get_model()
         h, w = frame.shape[:2]
         results = model(frame, verbose=False, conf=self._confidence_threshold)
@@ -58,10 +66,11 @@ class ObjectDetector:
                         "confidence": confidence,
                     })
 
-        return {
+        result = {
             "objects": objects,
             "object_count": len(objects),
         }
+        return self._cache_and_return(result)
 
     def close(self):
         """Release resources."""
