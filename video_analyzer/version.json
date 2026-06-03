@@ -1,0 +1,18 @@
+{
+  "version": "1.1.0",
+  "release_date": "2025-01-15",
+  "channel": "stable",
+  "min_python": "3.11",
+  "update_url": "https://api.github.com/repos/tangriyevafotima0-crypto/ufqbot/releases/latest",
+  "changelog": [
+    "Fixed camera look event counting - now counts distinct events (transitions)",
+    "Added separate x/y gaze thresholds for more accurate camera look detection",
+    "Improved walking detection using hip displacement instead of ankle positions",
+    "Added professional installer (install.bat) and updater system",
+    "Optimized frame processing with single RGB conversion",
+    "Added YOLO detection frequency control",
+    "Added camera look visual indicator on annotated video",
+    "Head pose angle normalization to prevent gimbal lock issues",
+    "Emotion detector handles edge cases with zero-dimension crops"
+  ]
+}

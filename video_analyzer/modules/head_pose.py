@@ -1,0 +1,122 @@
+"""Head pose estimation module using MediaPipe FaceMesh and solvePnP."""
+
+import numpy as np
+import cv2
+
+
+class HeadPoseEstimator:
+    """Estimates head pose (yaw, pitch, roll) from face landmarks."""
+
+    # Key landmark indices for pose estimation
+    NOSE_TIP = 1
+    CHIN = 152
+    LEFT_EYE_CORNER = 33
+    RIGHT_EYE_CORNER = 263
+    LEFT_MOUTH_CORNER = 61
+    RIGHT_MOUTH_CORNER = 291
+
+    # 3D model points (generic face model)
+    MODEL_POINTS = np.array([
+        (0.0, 0.0, 0.0),        # Nose tip
+        (0.0, -330.0, -65.0),   # Chin
+        (-225.0, 170.0, -135.0),  # Left eye corner
+        (225.0, 170.0, -135.0),   # Right eye corner
+        (-150.0, -150.0, -125.0),  # Left mouth corner
+        (150.0, -150.0, -125.0),   # Right mouth corner
+    ], dtype=np.float64)
+
+    def __init__(self):
+        # No longer creates its own FaceMesh instance.
+        # Landmarks are provided externally via analyze_frame.
+        pass
+
+    def analyze_frame(self, frame, face_mesh_landmarks=None):
+        """Estimate head pose angles.
+
+        Args:
+            frame: BGR image (numpy array)
+            face_mesh_landmarks: pre-computed FaceMesh landmarks list from
+                a shared FaceMesh instance. If None, returns empty result.
+
+        Returns:
+            dict with keys:
+                - yaw: left/right rotation in degrees
+                - pitch: up/down rotation in degrees
+                - roll: tilt rotation in degrees
+                - landmarks_2d: the 6 key landmark positions used
+        """
+        h, w, _ = frame.shape
+
+        if face_mesh_landmarks is None:
+            return {"yaw": None, "pitch": None, "roll": None, "landmarks_2d": None}
+
+        landmarks = face_mesh_landmarks
+
+        # Get 2D image points
+        landmark_indices = [
+            self.NOSE_TIP, self.CHIN,
+            self.LEFT_EYE_CORNER, self.RIGHT_EYE_CORNER,
+            self.LEFT_MOUTH_CORNER, self.RIGHT_MOUTH_CORNER,
+        ]
+
+        image_points = np.array([
+            (landmarks[idx].x * w, landmarks[idx].y * h)
+            for idx in landmark_indices
+        ], dtype=np.float64)
+
+        # Camera matrix (approximate)
+        focal_length = w
+        center = (w / 2, h / 2)
+        camera_matrix = np.array([
+            [focal_length, 0, center[0]],
+            [0, focal_length, center[1]],
+            [0, 0, 1],
+        ], dtype=np.float64)
+
+        dist_coeffs = np.zeros((4, 1))
+
+        # Solve PnP
+        success, rotation_vector, translation_vector = cv2.solvePnP(
+            self.MODEL_POINTS, image_points, camera_matrix, dist_coeffs
+        )
+
+        if not success:
+            return {"yaw": None, "pitch": None, "roll": None, "landmarks_2d": None}
+
+        # Convert rotation vector to rotation matrix
+        rotation_matrix, _ = cv2.Rodrigues(rotation_vector)
+
+        # Get Euler angles
+        proj_matrix = np.hstack((rotation_matrix, translation_vector))
+        euler_angles = cv2.decomposeProjectionMatrix(proj_matrix)[6]
+
+        pitch = self._normalize_angle(float(euler_angles[0][0]))
+        yaw = self._normalize_angle(float(euler_angles[1][0]))
+        roll = self._normalize_angle(float(euler_angles[2][0]))
+
+        return {
+            "yaw": yaw,
+            "pitch": pitch,
+            "roll": roll,
+            "landmarks_2d": image_points.tolist(),
+        }
+
+    @staticmethod
+    def _normalize_angle(angle):
+        """Normalize angle to [-180, 180] range to prevent gimbal lock flipping."""
+        while angle > 180:
+            angle -= 360
+        while angle < -180:
+            angle += 360
+        return angle
+
+    def close(self):
+        """Release resources."""
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
