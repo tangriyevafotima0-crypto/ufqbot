@@ -154,11 +154,18 @@ To build a standalone executable, run `build.bat`. The script will:
 1. Activate the virtual environment (or use system Python)
 2. Install/upgrade PyInstaller
 3. Install all requirements
-4. Build a single-file executable with PyInstaller
-5. Copy `version.json` to the dist folder
-6. Report the output file size
+4. Set `POLARS_SKIP_CPU_CHECK=1` to prevent crashes on CPUs without AVX/AVX2
+5. Build a directory-based executable with PyInstaller (onedir mode)
+6. Exclude problematic/unnecessary modules (polars, tensorboard, IPython, jupyter, notebook, pytest)
+7. Collect all data files for mediapipe and ultralytics
+8. Copy `version.json` to the output folder
+9. Report the output file size
 
-The executable will be at `dist/VideoAnalyzer.exe`.
+The executable will be at `dist/VideoAnalyzer/VideoAnalyzer.exe`.
+
+> **Note:** The `dist/VideoAnalyzer/` folder contains all files needed to run the application.
+> Distribute the entire folder, not just the `.exe` file. The onedir mode is used instead of
+> onefile for faster startup times and better reliability with large ML libraries.
 
 ## Performance Notes for Long Videos
 
