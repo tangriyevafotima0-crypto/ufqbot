@@ -1,6 +1,7 @@
 """Face detection module using MediaPipe FaceDetection."""
 
 import mediapipe as mp
+import mediapipe.solutions.face_detection
 import numpy as np
 
 

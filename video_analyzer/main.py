@@ -14,6 +14,10 @@ from tkinter import filedialog, messagebox
 import cv2
 import numpy as np
 import mediapipe as mp
+import mediapipe.solutions
+import mediapipe.solutions.face_mesh
+import mediapipe.solutions.face_detection
+import mediapipe.solutions.pose
 from tqdm import tqdm
 
 from config import Config

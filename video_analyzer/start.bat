@@ -21,6 +21,22 @@ if exist ".venv\Scripts\python.exe" (
     echo  Installation found. Starting application...
     echo.
     call .venv\Scripts\activate.bat
+
+    :: Check if dependencies need updating (version.json vs install_info.json)
+    python -c "import json, sys; v=json.load(open('version.json'))['version']; i=json.load(open('install_info.json'))['version'] if __import__('os').path.exists('install_info.json') else ''; sys.exit(0 if v==i else 1)"
+    if %ERRORLEVEL% neq 0 (
+        echo  Update detected - refreshing dependencies...
+        pip install -r requirements.txt --quiet
+        if %ERRORLEVEL% neq 0 (
+            echo  WARNING: Dependency update failed. Continuing with existing packages.
+        ) else (
+            echo  Dependencies updated.
+        )
+        python -c "import json, sys, os, datetime; info = {'install_date': datetime.datetime.now().isoformat(), 'version': json.load(open('version.json'))['version'], 'python_path': sys.executable, 'install_dir': os.path.abspath('.')}; json.dump(info, open('install_info.json', 'w'), indent=2)"
+        echo  install_info.json updated.
+    )
+    echo.
+    set YOLO_AUTOINSTALL=0
     python main.py
     goto :end
 )

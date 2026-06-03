@@ -1,10 +1,15 @@
 {
-  "version": "1.1.0",
-  "release_date": "2025-01-15",
+  "version": "1.2.0",
+  "release_date": "2025-06-03",
   "channel": "stable",
   "min_python": "3.11",
   "update_url": "https://api.github.com/repos/tangriyevafotima0-crypto/ufqbot/releases/latest",
   "changelog": [
+    "Fixed mediapipe AttributeError in PyInstaller EXE builds",
+    "Pinned dependency versions to prevent compatibility issues",
+    "Added PyInstaller hook for mediapipe with collect_all",
+    "Added auto-update dependency check on start (version.json vs install_info.json)",
+    "Added YOLO_AUTOINSTALL=0 to prevent ultralytics auto-updating",
     "Fixed camera look event counting - now counts distinct events (transitions)",
     "Added separate x/y gaze thresholds for more accurate camera look detection",
     "Improved walking detection using hip displacement instead of ankle positions",

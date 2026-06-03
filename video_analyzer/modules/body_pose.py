@@ -2,6 +2,7 @@
 
 import numpy as np
 import mediapipe as mp
+import mediapipe.solutions.pose
 
 
 class BodyPoseEstimator:

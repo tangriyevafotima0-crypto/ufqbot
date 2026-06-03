@@ -60,8 +60,14 @@ echo.
 echo [4/5] Building executable (this may take a few minutes)...
 echo  Setting POLARS_SKIP_CPU_CHECK=1 to prevent AVX/AVX2 crash...
 set POLARS_SKIP_CPU_CHECK=1
+set YOLO_AUTOINSTALL=0
 pyinstaller --onedir --windowed --name VideoAnalyzer ^
     --add-data "version.json;." ^
+    --additional-hooks-dir=hooks ^
+    --hidden-import mediapipe.solutions ^
+    --hidden-import mediapipe.solutions.face_mesh ^
+    --hidden-import mediapipe.solutions.face_detection ^
+    --hidden-import mediapipe.solutions.pose ^
     --exclude-module polars ^
     --exclude-module tensorboard ^
     --exclude-module IPython ^
