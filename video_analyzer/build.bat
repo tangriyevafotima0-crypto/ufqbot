@@ -70,7 +70,6 @@ pyinstaller --onedir --windowed --name VideoAnalyzer ^
     --hidden-import mediapipe.solutions.face_detection ^
     --hidden-import mediapipe.solutions.pose ^
     --exclude-module polars ^
-    --exclude-module tensorboard ^
     --exclude-module IPython ^
     --exclude-module jupyter ^
     --exclude-module notebook ^

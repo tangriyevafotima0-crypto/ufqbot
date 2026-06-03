@@ -23,7 +23,7 @@ echo.
 :: ---------------------------------------------------------------
 :: Step 1: Check Python installation
 :: ---------------------------------------------------------------
-echo [1/7] Checking Python installation...
+echo [1/6] Checking Python installation...
 python --version >nul 2>&1
 if %ERRORLEVEL% neq 0 (
     echo.
@@ -62,7 +62,7 @@ echo.
 :: ---------------------------------------------------------------
 :: Step 2: Create virtual environment
 :: ---------------------------------------------------------------
-echo [2/7] Creating virtual environment...
+echo [2/6] Creating virtual environment...
 python -m venv .venv
 if %ERRORLEVEL% neq 0 (
     echo  ERROR: Failed to create virtual environment.
@@ -75,7 +75,7 @@ echo.
 :: ---------------------------------------------------------------
 :: Step 3: Activate virtual environment
 :: ---------------------------------------------------------------
-echo [3/7] Activating virtual environment...
+echo [3/6] Activating virtual environment...
 call .venv\Scripts\activate.bat
 if %ERRORLEVEL% neq 0 (
     echo  ERROR: Failed to activate virtual environment.
@@ -88,7 +88,7 @@ echo.
 :: ---------------------------------------------------------------
 :: Step 4: Upgrade pip
 :: ---------------------------------------------------------------
-echo [4/7] Upgrading pip...
+echo [4/6] Upgrading pip...
 python -m pip install --upgrade pip --quiet
 if %ERRORLEVEL% neq 0 (
     echo  WARNING: pip upgrade failed, continuing with existing version.
@@ -99,7 +99,7 @@ echo.
 :: ---------------------------------------------------------------
 :: Step 5: Install requirements
 :: ---------------------------------------------------------------
-echo [5/7] Installing dependencies (this may take several minutes)...
+echo [5/6] Installing dependencies (this may take several minutes)...
 echo  Please be patient - downloading AI models and libraries...
 pip install -r requirements.txt --quiet
 if %ERRORLEVEL% neq 0 (
@@ -115,19 +115,11 @@ echo.
 :: ---------------------------------------------------------------
 :: Step 6: Pre-download YOLO model
 :: ---------------------------------------------------------------
-echo [6/7] Downloading YOLO object detection model...
+echo [6/6] Downloading YOLO object detection model...
 python -c "from ultralytics import YOLO; YOLO('yolov8n.pt'); print('  YOLO model ready.')"
 if %ERRORLEVEL% neq 0 (
     echo  WARNING: YOLO model download failed. It will be downloaded on first run.
 )
-echo.
-
-:: ---------------------------------------------------------------
-:: Step 7: Pre-download DeepFace model
-:: ---------------------------------------------------------------
-echo [7/7] Downloading emotion detection model...
-python -c "from deepface import DeepFace; DeepFace.build_model('Emotion'); print('  Emotion model ready.')"
-echo  Emotion model download attempted.
 echo.
 
 :: ---------------------------------------------------------------
