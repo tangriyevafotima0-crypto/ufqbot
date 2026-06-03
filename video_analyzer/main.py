@@ -135,7 +135,7 @@ def analyze_video(video_path, target_fps=None):
     face_detector = FaceDetector()
     eye_tracker = EyeTracker()
     head_pose_estimator = HeadPoseEstimator()
-    emotion_detector = EmotionDetector()
+    emotion_detector = EmotionDetector(config=cfg)
     body_pose_estimator = BodyPoseEstimator()
     action_recognizer = ActionRecognizer(sample_interval=sample_interval)
     object_detector = ObjectDetector(detection_interval=cfg.OBJECT_DETECTION_INTERVAL)
@@ -230,6 +230,7 @@ def analyze_video(video_path, target_fps=None):
                     }
 
                 # Emotion detection (uses shared face mesh landmarks)
+                # Note: processes only the primary face (shared FaceMesh max_num_faces=1)
                 try:
                     emotion_result = emotion_detector.analyze_frame(face_mesh_landmarks)
                     frame_results["emotions"] = emotion_result

@@ -10,7 +10,7 @@ class EmotionDetector:
     emotions without requiring any additional ML dependencies.
     """
 
-    EMOTIONS = ["happy", "angry", "sad", "neutral", "surprise", "fear", "disgust"]
+    EMOTIONS = ["happy", "angry", "sad", "neutral", "surprise", "fear"]
 
     # Landmark indices
     _MOUTH_LEFT = 61
@@ -27,7 +27,8 @@ class EmotionDetector:
     _RIGHT_BROW_MID = 334
 
     # Default thresholds (can be overridden via config)
-    SMILE_THRESHOLD = 0.28
+    SMILE_CORNER_THRESHOLD = 0.28
+    SMILE_RATIO_THRESHOLD = 0.28
     SURPRISE_MOUTH_THRESHOLD = 0.06
     SURPRISE_EYE_THRESHOLD = 0.30
     SAD_THRESHOLD = 0.015
@@ -40,7 +41,8 @@ class EmotionDetector:
             config: optional Config instance with emotion thresholds
         """
         if config is not None:
-            self.SMILE_THRESHOLD = getattr(config, 'SMILE_THRESHOLD', self.SMILE_THRESHOLD)
+            self.SMILE_CORNER_THRESHOLD = getattr(config, 'SMILE_CORNER_THRESHOLD', self.SMILE_CORNER_THRESHOLD)
+            self.SMILE_RATIO_THRESHOLD = getattr(config, 'SMILE_RATIO_THRESHOLD', self.SMILE_RATIO_THRESHOLD)
             self.SURPRISE_MOUTH_THRESHOLD = getattr(config, 'SURPRISE_MOUTH_THRESHOLD', self.SURPRISE_MOUTH_THRESHOLD)
             self.SURPRISE_EYE_THRESHOLD = getattr(config, 'SURPRISE_EYE_THRESHOLD', self.SURPRISE_EYE_THRESHOLD)
             self.SAD_THRESHOLD = getattr(config, 'SAD_THRESHOLD', self.SAD_THRESHOLD)
@@ -115,9 +117,9 @@ class EmotionDetector:
         }
 
         # Happy: mouth corners raised relative to center
-        if smile_indicator > self.SMILE_THRESHOLD * mouth_width:
+        if smile_indicator > self.SMILE_CORNER_THRESHOLD * mouth_width:
             scores["happy"] = min(1.0, smile_indicator / (mouth_width * 0.5))
-        elif mouth_ratio > self.SMILE_THRESHOLD:
+        elif mouth_ratio > self.SMILE_RATIO_THRESHOLD:
             # Wide mouth with raised corners
             scores["happy"] = min(1.0, mouth_ratio / 0.5)
 

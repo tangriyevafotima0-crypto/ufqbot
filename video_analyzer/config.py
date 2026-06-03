@@ -41,7 +41,8 @@ class Config:
         self.CAMERA_LOOK_THRESHOLD_Y = 0.12
 
         # Emotion detection thresholds (landmark-based)
-        self.SMILE_THRESHOLD = 0.28
+        self.SMILE_CORNER_THRESHOLD = 0.28
+        self.SMILE_RATIO_THRESHOLD = 0.28
         self.SURPRISE_MOUTH_THRESHOLD = 0.06
         self.SURPRISE_EYE_THRESHOLD = 0.30
         self.SAD_THRESHOLD = 0.015
