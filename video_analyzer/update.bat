@@ -90,7 +90,7 @@ echo.
 git --version >nul 2>&1
 if %ERRORLEVEL% equ 0 (
     echo  Using git to fetch latest code...
-    git pull origin feature/video-analyzer
+    git pull
     if %ERRORLEVEL% neq 0 (
         echo.
         echo  WARNING: git pull failed. You may need to resolve conflicts manually.

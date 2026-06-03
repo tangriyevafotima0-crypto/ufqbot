@@ -16,6 +16,7 @@ import numpy as np
 import mediapipe as mp
 from tqdm import tqdm
 
+from config import Config
 from modules.face_detector import FaceDetector
 from modules.eye_tracker import EyeTracker
 from modules.head_pose import HeadPoseEstimator
@@ -70,13 +71,16 @@ def format_duration(seconds):
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
-def analyze_video(video_path, target_fps=2.5):
+def analyze_video(video_path, target_fps=None):
     """Main analysis pipeline for a video file.
 
     Args:
         video_path: path to the video file
-        target_fps: frames per second to analyze (default 2.5)
+        target_fps: frames per second to analyze (default from Config)
     """
+    cfg = Config()
+    if target_fps is None:
+        target_fps = cfg.TARGET_FPS
     # Open video
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -132,7 +136,7 @@ def analyze_video(video_path, target_fps=2.5):
     emotion_detector = EmotionDetector()
     body_pose_estimator = BodyPoseEstimator()
     action_recognizer = ActionRecognizer(sample_interval=sample_interval)
-    object_detector = ObjectDetector(detection_interval=3)
+    object_detector = ObjectDetector(detection_interval=cfg.OBJECT_DETECTION_INTERVAL)
 
     # Shared FaceMesh instance (refine_landmarks=True is the superset
     # needed by EyeTracker for iris landmarks; HeadPoseEstimator uses

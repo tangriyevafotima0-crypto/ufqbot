@@ -126,7 +126,7 @@ echo.
 :: Step 7: Pre-download DeepFace model
 :: ---------------------------------------------------------------
 echo [7/8] Downloading emotion detection model...
-python -c "try:%NL%    from deepface import DeepFace%NL%    DeepFace.analyze(img_path='modules/__init__.py', actions=['emotion'], enforce_detection=False, silent=True)%NL%except:%NL%    pass%NL%print('  Emotion model ready.')"
+python -c "exec('try:\n    from deepface import DeepFace\n    DeepFace.analyze(img_path=\"modules/__init__.py\", actions=[\"emotion\"], enforce_detection=False, silent=True)\nexcept:\n    pass\nprint(\"  Emotion model ready.\")')"
 echo  Emotion model download attempted.
 echo.
 

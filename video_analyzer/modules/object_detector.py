@@ -70,7 +70,8 @@ class ObjectDetector:
             "objects": objects,
             "object_count": len(objects),
         }
-        return self._cache_and_return(result)
+        self._cached_result = result
+        return result
 
     def close(self):
         """Release resources."""
