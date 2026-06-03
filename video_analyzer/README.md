@@ -27,20 +27,27 @@ A comprehensive video analysis desktop application that processes videos and gen
 - FLV (.flv)
 - WebM (.webm)
 
-## Installation
+## Quick Start (Windows)
 
-### Quick Install (Windows)
+**Just double-click `start.bat` - that is all you need to do.**
 
-1. Ensure Python 3.11 or later is installed and added to PATH.
-2. Double-click `install.bat` or run it from a terminal.
-
-The installer will:
-- Verify your Python version
+On the first run, `start.bat` will automatically:
+- Check that Python 3.11+ is installed
 - Create a virtual environment
 - Install all dependencies
-- Download required AI models (YOLO, DeepFace)
-- Create a desktop shortcut
-- Save installation metadata to `install_info.json`
+- Download AI models (YOLO, DeepFace)
+- Launch the application
+
+On subsequent runs, it skips installation and launches immediately.
+
+> **Prerequisite:** Python 3.11 or later must be installed and added to PATH.
+> Download it from https://www.python.org/downloads/ and check "Add Python to PATH" during installation.
+
+## Alternative Installation
+
+### Using install.bat
+
+If you prefer to install separately, double-click `install.bat`. It performs the same setup as `start.bat` but does not launch the app afterward. It also creates a desktop shortcut.
 
 ### Manual Install
 
@@ -61,7 +68,9 @@ pip install -r requirements.txt
 
 ## Usage
 
-Run the application:
+The easiest way to run is to double-click `start.bat`.
+
+Alternatively, run the application manually:
 
 ```bash
 python main.py
@@ -171,7 +180,8 @@ video_analyzer/
 ├── config.py                  # Centralized configuration
 ├── version.json               # Version tracking and metadata
 ├── requirements.txt           # Python dependencies
-├── install.bat                # Professional Windows installer
+├── start.bat                  # Single-click install + launch (recommended)
+├── install.bat                # Standalone installer (creates desktop shortcut)
 ├── update.bat                 # Update checker and applier
 ├── build.bat                  # PyInstaller build script
 ├── README.md                  # This file
