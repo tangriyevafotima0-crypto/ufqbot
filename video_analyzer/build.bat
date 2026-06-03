@@ -1,4 +1,5 @@
 @echo off
+cd /d "%~dp0"
 setlocal enabledelayedexpansion
 title Video Analyzer - Build
 color 0A

@@ -1,4 +1,5 @@
 @echo off
+cd /d "%~dp0"
 setlocal enabledelayedexpansion
 title Video Analyzer - Installer
 color 0B
@@ -126,7 +127,7 @@ echo.
 :: Step 7: Pre-download DeepFace model
 :: ---------------------------------------------------------------
 echo [7/8] Downloading emotion detection model...
-python -c "exec('try:\n    from deepface import DeepFace\n    DeepFace.analyze(img_path=\"modules/__init__.py\", actions=[\"emotion\"], enforce_detection=False, silent=True)\nexcept:\n    pass\nprint(\"  Emotion model ready.\")')"
+python -c "from deepface import DeepFace; DeepFace.build_model('Emotion'); print('  Emotion model ready.')"
 echo  Emotion model download attempted.
 echo.
 
@@ -145,7 +146,7 @@ if %ERRORLEVEL% equ 0 (
 )
 
 :: Write install_info.json
-python -c "import json, sys, os, datetime; info = {'install_date': datetime.datetime.now().isoformat(), 'version': json.load(open('version.json'))['version'], 'python_path': sys.executable, 'install_dir': os.path.abspath('.')}; json.dump(info, open('install_info.json', 'w'), indent=2); print('  Install info saved.')"
+python check_update.py --force
 
 echo.
 echo  ============================================================

@@ -75,7 +75,6 @@ class UpdateChecker:
         }
 
         if not self._update_url:
-            result["error"] = "No update URL configured"
             return result
 
         try:
@@ -91,7 +90,7 @@ class UpdateChecker:
             latest_version = tag.lstrip("v")
 
             if not latest_version:
-                result["error"] = "Could not parse version from release tag"
+                # No valid tag found, not an error - just no release yet
                 return result
 
             result["latest_version"] = latest_version
@@ -112,15 +111,18 @@ class UpdateChecker:
                     ]
                     result["changelog"] = lines if lines else None
 
-        except urllib.error.URLError as e:
-            result["error"] = f"Network error: {e.reason}"
         except urllib.error.HTTPError as e:
-            result["error"] = f"HTTP error {e.code}: {e.reason}"
-        except json.JSONDecodeError:
-            result["error"] = "Invalid response from update server"
-        except OSError as e:
-            result["error"] = f"Connection error: {e}"
-        except Exception as e:
-            result["error"] = f"Unexpected error: {e}"
+            if e.code == 404:
+                # No releases exist yet - this is not an error
+                pass
+            else:
+                # Other HTTP errors - preserve a brief message for callers
+                result["error"] = f"HTTP {e.code}"
+        except urllib.error.URLError:
+            # Network unreachable - soft handling with brief message
+            result["error"] = "Network unavailable"
+        except Exception:
+            # Any other error - never raise, just return safe default
+            pass
 
         return result
