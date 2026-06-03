@@ -1,12 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 title Video Analyzer
-color 0B
-
-:: ---------------------------------------------------------------
-:: Video Analyzer - Single-Click Launcher
-:: Automatically installs on first run, then launches the app.
-:: ---------------------------------------------------------------
+cd /d "%~dp0"
 
 echo.
 echo  ============================================================
@@ -14,36 +9,13 @@ echo  =          V I D E O   A N A L Y Z E R                    =
 echo  ============================================================
 echo.
 
-:: ---------------------------------------------------------------
-:: Check if already installed (venv exists with python.exe)
-:: ---------------------------------------------------------------
-if exist ".venv\Scripts\python.exe" (
-    echo  Installation found. Starting application...
-    echo.
-    call .venv\Scripts\activate.bat
-
-    :: Check if dependencies need updating (version.json vs install_info.json)
-    python -c "import json,sys,os;exec(\"try:\\n v=json.load(open('version.json'))['version']\\n i=json.load(open('install_info.json'))['version'] if os.path.exists('install_info.json') else ''\\n sys.exit(0 if v==i else 1)\\nexcept Exception:\\n sys.exit(1)\")"
-    if %ERRORLEVEL% neq 0 (
-        echo  Update detected - refreshing dependencies...
-        pip install -r requirements.txt --quiet
-        if %ERRORLEVEL% neq 0 (
-            echo  WARNING: Dependency update failed. Continuing with existing packages.
-        ) else (
-            echo  Dependencies updated.
-        )
-        python -c "import json, sys, os, datetime; info = {'install_date': datetime.datetime.now().isoformat(), 'version': json.load(open('version.json'))['version'], 'python_path': sys.executable, 'install_dir': os.path.abspath('.')}; json.dump(info, open('install_info.json', 'w'), indent=2)"
-        echo  install_info.json updated.
-    )
-    echo.
-    set YOLO_AUTOINSTALL=0
-    python main.py
-    goto :end
-)
+IF NOT EXIST ".venv\Scripts\python.exe" GOTO :install
+GOTO :run
 
 :: ---------------------------------------------------------------
 :: First time setup - full installation
 :: ---------------------------------------------------------------
+:install
 echo  First time setup detected - installing dependencies...
 echo  This will take a few minutes. Please wait...
 echo.
@@ -154,7 +126,7 @@ echo.
 :: Step 7: Pre-download DeepFace model
 :: ---------------------------------------------------------------
 echo [7/7] Downloading emotion detection model...
-python -c "exec('try:\n    from deepface import DeepFace\n    DeepFace.analyze(img_path=\"modules/__init__.py\", actions=[\"emotion\"], enforce_detection=False, silent=True)\nexcept:\n    pass\nprint(\"  Emotion model ready.\")')"
+python -c "from deepface import DeepFace; print('  DeepFace model loaded.')"
 echo  Emotion model download attempted.
 echo.
 
@@ -170,11 +142,18 @@ echo  ============================================================
 echo.
 echo  Starting Video Analyzer...
 echo.
+GOTO :run
 
 :: ---------------------------------------------------------------
-:: Launch the application
+:: Run the application
 :: ---------------------------------------------------------------
+:run
+echo  Starting application...
+call .venv\Scripts\activate.bat
+python check_update.py
+set YOLO_AUTOINSTALL=0
 python main.py
+GOTO :end
 
 :end
 echo.

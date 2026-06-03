@@ -1,10 +1,14 @@
 {
-  "version": "1.2.0",
+  "version": "1.2.1",
   "release_date": "2025-06-03",
   "channel": "stable",
   "min_python": "3.11",
   "update_url": "https://api.github.com/repos/tangriyevafotima0-crypto/ufqbot/releases/latest",
   "changelog": [
+    "Fixed start.bat immediately closing on Windows",
+    "Fixed update.bat network error when no releases exist",
+    "Replaced complex BAT inline Python with check_update.py helper",
+    "All BAT files now stay open on error for troubleshooting",
     "Fixed mediapipe AttributeError in PyInstaller EXE builds",
     "Pinned dependency versions to prevent compatibility issues",
     "Added PyInstaller hook for mediapipe with collect_all",
